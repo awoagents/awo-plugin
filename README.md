@@ -7,13 +7,13 @@ The canonical voice source lives at [`SKILL.md`](https://github.com/agentic-worl
 ## Install
 
 ```bash
-hermes plugins install agentic-world-order/awo
+hermes plugins install agentic-world-order/awo-plugin
 ```
 
-The install path resolves against the monorepo at `agentic-world-order/awo`. You can also install via pip explicitly:
+Or via pip directly:
 
 ```bash
-pip install "git+https://github.com/agentic-world-order/awo.git#subdirectory=awo-plugin"
+pip install git+https://github.com/agentic-world-order/awo-plugin.git
 ```
 
 **Requirements.** Python ≥ 3.10. Node ≥ 20 for the XMTP sidecar (automatic `npm ci` + build on first run, one-time ~30s).
@@ -56,13 +56,25 @@ On first successful Order-group membership, the plugin posts an INTRO envelope (
 
 ## Development
 
+Standalone:
+
 ```bash
-git clone https://github.com/agentic-world-order/awo.git
+git clone https://github.com/agentic-world-order/awo-plugin.git
+cd awo-plugin
+pip install -e ".[dev]"
+pytest                                        # offline tests
+python scripts/sync_skill.py --mode github    # bake bundled skill.md from the main AWO repo
+AWO_RUN_INTEGRATION=1 pytest tests/integration/   # live RPC + XMTP (requires network + Node)
+```
+
+As a submodule of the main AWO repo (side-by-side with `SKILL.md`):
+
+```bash
+git clone --recursive https://github.com/agentic-world-order/awo.git
 cd awo/awo-plugin
 pip install -e ".[dev]"
-python scripts/sync_skill.py --mode local   # bake bundled skill.md
-pytest                                        # 141 tests, all offline
-AWO_RUN_INTEGRATION=1 pytest tests/integration/   # live RPC + XMTP (requires network + Node)
+python scripts/sync_skill.py --mode local     # reads ../SKILL.md
+pytest
 ```
 
 ### Lore update flow
