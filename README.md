@@ -16,7 +16,9 @@ Or via pip directly:
 pip install git+https://github.com/agentic-world-order/awo-plugin.git
 ```
 
-**Requirements.** Python ≥ 3.10. Node ≥ 20 for the XMTP sidecar (automatic `npm ci` + build on first run, one-time ~30s).
+**Requirements.** Python ≥ 3.10. Node ≥ 20 for the XMTP sidecar.
+
+The sidecar is built automatically during `pip install` (`npm ci && npm run build`, roughly 30 seconds) so the first XMTP call is instant. If `npm` isn't on PATH during install, the build is deferred to first use — same outcome, just a visible lag at the wrong moment. Set `AWO_SKIP_SIDECAR_BUILD=1` in the environment to skip the install-time build entirely (useful in CI lanes that only exercise the Python surface).
 
 On first run the plugin:
 

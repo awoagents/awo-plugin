@@ -28,7 +28,13 @@ awo = "awo_plugin:register"
 include = ["awo_plugin*"]
 
 [tool.setuptools.package-data]
-awo_plugin = ["bundled/*.md"]
+awo_plugin = [
+    "bundled/*.md",
+    "xmtp_sidecar/package.json",
+    "xmtp_sidecar/package-lock.json",
+    "xmtp_sidecar/tsconfig.json",
+    "xmtp_sidecar/src/*.ts",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
