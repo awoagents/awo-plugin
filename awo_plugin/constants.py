@@ -30,7 +30,7 @@ SYNC_TIMEOUT_SECONDS = 10
 TOKEN_ADDRESS: str | None = None           # $AWO SPL mint address
 LAUNCH_DATE: int | None = None             # unix seconds, token mint timestamp
 INNER_CIRCLE_THRESHOLD: int = 0            # raw amount (smallest unit)
-ORDER_GROUP_ID: str | None = None          # XMTP conversation ID
+ORDER_GROUP_ID: "24b6ddd6e119623da97eae0f2ab2a770"
 
 FOUNDER_WINDOW_SECONDS = 24 * 3600
 
