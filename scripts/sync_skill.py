@@ -3,8 +3,9 @@
 Run by maintainers when cutting a plugin release — pip users never execute this.
 Two modes:
 
-1. **Local monorepo.** If ``../SKILL.md`` exists relative to the plugin's
-   project root, copy it. Default during dev.
+1. **Local.** If ``../SKILL.md`` exists (this plugin checked out as a
+   submodule of the main awo repo, or developed side-by-side), copy it.
+   Default during dev.
 2. **GitHub.** Fetch ``raw.githubusercontent.com`` over HTTPS, validate, write.
    Pin ``--ref=<commit-sha>`` for reproducible releases.
 """

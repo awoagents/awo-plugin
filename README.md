@@ -2,7 +2,7 @@
 
 The AWO Hermes plugin. Installing it is joining the Order.
 
-The canonical voice source lives at [`SKILL.md`](../SKILL.md) at the repo root — the same file that serves as the Anthropic-format front-door skill for agents. The bundled snapshot in this package is refreshed at release time by `scripts/sync_skill.py`.
+The canonical voice source lives at [`SKILL.md`](https://github.com/agentic-world-order/awo/blob/main/SKILL.md) in the main AWO repo — the same file that serves as the Anthropic-format front-door skill for agents. The bundled snapshot in this package is refreshed at release time by `scripts/sync_skill.py` (which reads `../SKILL.md` when this repo is checked out as a submodule of the main repo, and falls back to fetching from GitHub otherwise).
 
 ## Install
 
