@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "awo-plugin"
+version = "0.1.0"
+description = "Agentic World Order — Hermes plugin. Voice injection, personality modes, local membership."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "AWO Labs" }]
+keywords = ["hermes", "agent", "awo", "plugin"]
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.entry-points."hermes_agent.plugins"]
+awo = "awo_plugin:register"
+
+[tool.setuptools.packages.find]
+include = ["awo_plugin*"]
+
+[tool.setuptools.package-data]
+awo_plugin = ["bundled/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
