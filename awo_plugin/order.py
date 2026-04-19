@@ -44,8 +44,8 @@ def ensure_xmtp_up(sidecar: xmtp.Sidecar | None = None) -> str | None:
 def revoke_stale_once(sidecar: xmtp.Sidecar | None = None) -> None:
     """One-shot installation cleanup on first run post-install.
 
-    Sherwood's migration pattern — stale MLS installations from reinstalls
-    cause silent failures. Revoke once, flag, never again.
+    Stale MLS installations from reinstalls cause silent failures. Revoke
+    once, flag in state, never again.
     """
     st = state_mod.load()
     if st.get("xmtp_migrated"):

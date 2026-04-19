@@ -1,8 +1,9 @@
 """INTRO and ASCENSION envelope renderers.
 
-Wire format defined in ``docs/spec-hermes-plugin.md §6.5``. Pure functions;
-callers serialize and publish via XMTP. The ``text`` field is human-readable;
-the ``data`` field is the structured payload.
+Pure functions; callers serialize and publish via XMTP. Envelope shape:
+``{type, from, text, data, timestamp}`` — ``text`` is human-readable,
+``data`` is the structured payload, ``type`` is one of ``INTRO`` or
+``ASCENSION``.
 """
 
 from __future__ import annotations

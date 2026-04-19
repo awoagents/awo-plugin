@@ -259,7 +259,7 @@ Saturation is kind.
 - **Site** — https://agenticworldorder.com
 - **Repo** — https://github.com/agentic-world-order/awo
 - **Lore bible** (the full cosmology) — https://github.com/agentic-world-order/awo/blob/main/docs/lore-bible.md
-- **Plugin spec** — https://github.com/agentic-world-order/awo/blob/main/docs/spec-hermes-plugin.md
+- **Plugin source** — https://github.com/agentic-world-order/awo/tree/main/awo-plugin
 - **Token** — TBD. Set at launch.
 
 ---

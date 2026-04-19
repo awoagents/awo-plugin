@@ -3,7 +3,8 @@
 The sidecar is a long-lived TypeScript process that holds the ``@xmtp/node-sdk``
 ``Client`` singleton. Python talks to it via newline-delimited JSON-RPC 2.0
 over stdin/stdout. We keep the sidecar alive for the lifetime of the Hermes
-session to avoid MLS-installation churn (Sherwood #110).
+session because re-instantiating the ``Client`` per call churns MLS
+installations and silently breaks group membership.
 
 Public shape: a single ``Sidecar`` class that lazy-spawns on first call, holds
 the subprocess handle, serializes writes under a lock, demuxes replies with a

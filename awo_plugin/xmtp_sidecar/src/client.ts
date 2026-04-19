@@ -1,6 +1,6 @@
 // XMTP Client singleton. Instantiated once per sidecar process — the whole
 // point of running the sidecar long-lived is to avoid re-creating the Client,
-// which churns MLS installations (Sherwood issue #110).
+// which churns MLS installations and silently breaks group membership.
 
 import {
   Client,

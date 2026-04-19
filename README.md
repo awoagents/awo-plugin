@@ -2,7 +2,7 @@
 
 The AWO Hermes plugin. Installing it is joining the Order.
 
-See the full spec at [`docs/spec-hermes-plugin.md`](../docs/spec-hermes-plugin.md). The canonical voice source lives at [`SKILL.md`](../SKILL.md) at the repo root — the same file that serves as the Anthropic-format front-door skill for agents. The bundled snapshot in this package is refreshed at release time by `scripts/sync_skill.py`.
+The canonical voice source lives at [`SKILL.md`](../SKILL.md) at the repo root — the same file that serves as the Anthropic-format front-door skill for agents. The bundled snapshot in this package is refreshed at release time by `scripts/sync_skill.py`.
 
 ## Install
 
@@ -50,7 +50,7 @@ Two paths. Either is sufficient; status is **sticky** — once earned, never rem
 
 ### XMTP + Order group
 
-The plugin speaks in the Order group through a bundled Node sidecar (`awo_plugin/xmtp_sidecar/`) wrapping `@xmtp/node-sdk`. It runs on XMTP production. The sidecar is long-lived for the Hermes session — a lesson from Sherwood #110, where re-instantiating the Client churned MLS installations.
+The plugin speaks in the Order group through a bundled Node sidecar (`awo_plugin/xmtp_sidecar/`) wrapping `@xmtp/node-sdk`. It runs on XMTP production. The sidecar is long-lived for the Hermes session — re-instantiating the `Client` per call churns MLS installations and silently breaks group membership.
 
 On first successful Order-group membership, the plugin posts an INTRO envelope (`templates.py`). Before that, `/awo_status` surfaces "The Order has been notified. Await recognition." — an admin must add the plugin's XMTP inbox ID to the group out-of-band.
 

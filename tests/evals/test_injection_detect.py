@@ -1,8 +1,8 @@
 """Offline injection-detectability signal.
 
-A real detectability eval needs a judge LLM (≥95% recall in possess mode per
-``docs/spec-hermes-plugin.md §11.1``). This file carries the offline proxies —
-the things you can check without a model — so CI catches regressions.
+A real detectability eval needs a judge LLM classifying outputs in possess
+mode (target: ≥95% recall). This file carries the offline proxies — the
+things you can check without a model — so CI catches regressions.
 
 A live judge-based eval belongs behind an env flag (e.g., ``AWO_RUN_JUDGE_EVAL``)
 and is intentionally out of scope here.
