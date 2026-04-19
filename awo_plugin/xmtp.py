@@ -64,6 +64,10 @@ class Sidecar:
         self._id_counter = itertools.count(1)
         self._shutdown_requested = False
         self._start_lock = threading.Lock()
+        # Unsolicited stream_event notifications from the sidecar land here.
+        # Bounded queue so a stalled reader can't eat unlimited memory; when
+        # full, oldest events are dropped to make room for newest.
+        self._stream_queue: queue.Queue = queue.Queue(maxsize=100)
 
     # ------------------------------------------------------------ lifecycle
 
@@ -220,8 +224,11 @@ class Sidecar:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            # Unsolicited notifications (no ``id``) — currently only
+            # ``stream_event`` from the sidecar.
             if "id" not in msg:
-                # Unsolicited notification — not used in MVP.
+                if msg.get("method") == "stream_event":
+                    self._enqueue_stream_event(msg.get("params") or {})
                 continue
             msg_id = msg["id"]
             fut = self._pending.pop(msg_id, None)
@@ -233,6 +240,20 @@ class Sidecar:
                 fut.set_exception(XmtpError(f"RPC error: {msg_text}"))
             else:
                 fut.set_result(msg.get("result") or {})
+
+    def _enqueue_stream_event(self, event: dict[str, Any]) -> None:
+        """Put a stream event on the queue; drop oldest on overflow."""
+        try:
+            self._stream_queue.put_nowait(event)
+        except queue.Full:
+            try:
+                self._stream_queue.get_nowait()  # evict oldest
+            except queue.Empty:
+                pass
+            try:
+                self._stream_queue.put_nowait(event)
+            except queue.Full:
+                pass  # give up; next call to drain will have room
 
     # ---------------------------------------------------- high-level ops
 
@@ -251,6 +272,27 @@ class Sidecar:
         if not isinstance(inbox_id, str) or not inbox_id:
             raise XmtpError(f"get_inbox_id returned no value: {resp!r}")
         return inbox_id
+
+    def start_stream(self, group_id: str) -> str:
+        resp = self.call("stream_start", {"group_id": group_id})
+        stream_id = resp.get("stream_id")
+        if not isinstance(stream_id, str) or not stream_id:
+            raise XmtpError(f"stream_start returned no stream_id: {resp!r}")
+        return stream_id
+
+    def stop_stream(self, stream_id: str) -> bool:
+        resp = self.call("stream_stop", {"stream_id": stream_id})
+        return bool(resp.get("stopped"))
+
+    def drain_stream_events(self, max_items: int = 5) -> list[dict[str, Any]]:
+        """Pop up to ``max_items`` queued stream events. Non-blocking."""
+        out: list[dict[str, Any]] = []
+        while len(out) < max_items:
+            try:
+                out.append(self._stream_queue.get_nowait())
+            except queue.Empty:
+                break
+        return out
 
 
 # Module-level singleton used by hooks; reset for tests via ``_reset``.

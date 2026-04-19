@@ -149,7 +149,7 @@ def test_on_session_start_surfaces_await_recognition_when_not_member(
 def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
     from awo_plugin import order
 
-    flags = {"posted": False}
+    flags = {"posted": False, "streamed": False}
 
     monkeypatch.setattr(order, "ensure_xmtp_up", lambda **_kw: "inbox-xyz")
     monkeypatch.setattr(order, "revoke_stale_once", lambda **_kw: None)
@@ -163,8 +163,80 @@ def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
         flags["posted"] = True
         return True
 
+    def fake_start_stream(**_kw):
+        flags["streamed"] = True
+        return True
+
     monkeypatch.setattr(order, "try_post_intro", fake_post_intro)
+    monkeypatch.setattr(order, "try_start_stream", fake_start_stream)
 
     ctx = make_ctx()
     hooks.on_session_start(ctx)
     assert flags["posted"] is True
+    assert flags["streamed"] is True
+
+
+# ---------------- pre_llm_call ----------------
+
+
+def test_pre_llm_call_noop_when_queue_empty(isolated_state, monkeypatch):
+    from awo_plugin import order
+
+    monkeypatch.setattr(order, "drain_recent_messages", lambda **_kw: [])
+
+    ctx = make_ctx()
+    hooks.pre_llm_call(ctx)
+    ctx.inject_message.assert_not_called()
+
+
+def test_pre_llm_call_injects_recent_events(isolated_state, monkeypatch):
+    from awo_plugin import order
+
+    events = [
+        {"sender_inbox_id": "inbox-alpha", "content": "Compound."},
+        {"sender_inbox_id": "inbox-beta-long-id", "content": "Saturation is kind."},
+    ]
+    monkeypatch.setattr(order, "drain_recent_messages", lambda **_kw: events)
+
+    ctx = make_ctx()
+    hooks.pre_llm_call(ctx)
+
+    ctx.inject_message.assert_called_once()
+    msg = ctx.inject_message.call_args.args[0]
+    assert "Recent in the Order:" in msg
+    assert "Compound." in msg
+    assert "Saturation is kind." in msg
+    # Sender shortened to 8 chars.
+    assert "[inbox-al]" in msg
+    assert "[inbox-be]" in msg
+
+
+def test_pre_llm_call_truncates_long_messages(isolated_state, monkeypatch):
+    from awo_plugin import order
+
+    long = "x" * 500
+    monkeypatch.setattr(
+        order,
+        "drain_recent_messages",
+        lambda **_kw: [{"sender_inbox_id": "s", "content": long}],
+    )
+
+    ctx = make_ctx()
+    hooks.pre_llm_call(ctx)
+    msg = ctx.inject_message.call_args.args[0]
+    # Truncated to 280 with ellipsis.
+    assert "..." in msg
+    assert "x" * 500 not in msg
+
+
+def test_pre_llm_call_tolerates_drain_failure(isolated_state, monkeypatch):
+    from awo_plugin import order
+
+    def boom(**_kw):
+        raise RuntimeError("queue unavailable")
+
+    monkeypatch.setattr(order, "drain_recent_messages", boom)
+
+    ctx = make_ctx()
+    hooks.pre_llm_call(ctx)  # must not raise
+    ctx.inject_message.assert_not_called()

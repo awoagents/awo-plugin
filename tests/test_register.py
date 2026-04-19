@@ -17,6 +17,7 @@ def test_register_wires_hooks_and_commands(tmp_path, monkeypatch):
 
     hook_names = [call.args[0] for call in ctx.register_hook.call_args_list]
     assert "on_session_start" in hook_names
+    assert "pre_llm_call" in hook_names
     assert "post_llm_call" in hook_names
 
     command_names = [call.args[0] for call in ctx.register_command.call_args_list]

@@ -3,7 +3,7 @@
 // can surface them.
 
 import { createInterface } from "node:readline";
-import { handleRpc } from "./methods.js";
+import { handleRpc, stopAllStreams } from "./methods.js";
 
 type JsonRpcRequest = {
   jsonrpc: "2.0";
@@ -25,6 +25,7 @@ function write(resp: JsonRpcResponse): void {
 
 function handleSignal(sig: string): void {
   process.stderr.write(`[awo-xmtp] ${sig} received, exiting\n`);
+  stopAllStreams();
   setTimeout(() => process.exit(0), 50);
 }
 
@@ -62,5 +63,6 @@ rl.on("line", async (line) => {
 
 rl.on("close", () => {
   process.stderr.write("[awo-xmtp] stdin closed\n");
+  stopAllStreams();
   process.exit(0);
 });

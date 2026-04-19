@@ -30,6 +30,7 @@ _DEFAULTS: dict[str, Any] = {
     "last_balance_check_ts": None,
     "xmtp_inbox_id": None,
     "xmtp_migrated": False,         # one-shot stale-installation revoke flag
+    "order_stream_id": None,        # active Order-group stream handle
     "membership": "initiate",
     "inner_circle_reason": None,
     "intro_posted_ts": None,

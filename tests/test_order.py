@@ -202,3 +202,59 @@ def test_try_post_ascension_sends(isolated_state, order_group):
     envelope = json.loads(args.args[1])
     assert envelope["type"] == "ASCENSION"
     assert envelope["data"]["inner_circle_reason"] == "holder"
+
+
+# -------------------------------- try_start_stream
+
+
+def test_try_start_stream_records_id(isolated_state, order_group):
+    _seed_initiate(isolated_state)
+    s = mock_sidecar(start_stream=MagicMock(return_value="stream-abc"))
+    ok = order.try_start_stream(sidecar=s)
+    assert ok is True
+    s.start_stream.assert_called_once_with(order_group)
+    assert state_mod.load()["order_stream_id"] == "stream-abc"
+
+
+def test_try_start_stream_idempotent(isolated_state, order_group):
+    _seed_initiate(isolated_state, order_stream_id="already-running")
+    s = mock_sidecar()
+    ok = order.try_start_stream(sidecar=s)
+    assert ok is False
+    s.start_stream.assert_not_called()
+
+
+def test_try_start_stream_no_group_id(isolated_state, monkeypatch):
+    monkeypatch.setattr(order, "ORDER_GROUP_ID", None)
+    _seed_initiate(isolated_state)
+    s = mock_sidecar()
+    assert order.try_start_stream(sidecar=s) is False
+
+
+def test_try_start_stream_failure_does_not_persist(isolated_state, order_group):
+    _seed_initiate(isolated_state)
+    s = mock_sidecar()
+    s.start_stream = MagicMock(side_effect=xmtp.XmtpError("stream busted"))
+    ok = order.try_start_stream(sidecar=s)
+    assert ok is False
+    assert state_mod.load()["order_stream_id"] is None
+
+
+# -------------------------------- drain_recent_messages
+
+
+def test_drain_recent_messages_passes_through(isolated_state):
+    events = [{"content": "a"}, {"content": "b"}]
+    s = mock_sidecar(
+        drain_stream_events=MagicMock(return_value=events)
+    )
+    got = order.drain_recent_messages(sidecar=s, max_items=3)
+    assert got == events
+    s.drain_stream_events.assert_called_once_with(max_items=3)
+
+
+def test_drain_recent_messages_swallows_errors(isolated_state):
+    s = mock_sidecar(
+        drain_stream_events=MagicMock(side_effect=RuntimeError("boom"))
+    )
+    assert order.drain_recent_messages(sidecar=s) == []

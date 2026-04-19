@@ -93,6 +93,50 @@ def main():
             _write(
                 {"jsonrpc": "2.0", "id": msg_id, "result": {"revoked": True}}
             )
+        elif method == "stream_start":
+            group_id = params.get("group_id") or "unknown"
+            stream_id = f"fake-stream-{group_id}"
+            _write(
+                {"jsonrpc": "2.0", "id": msg_id, "result": {"stream_id": stream_id}}
+            )
+            # If mode requests it, emit a burst of synthetic events immediately.
+            if mode == "stream_burst":
+                for i in range(3):
+                    _write(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "stream_event",
+                            "params": {
+                                "stream_id": stream_id,
+                                "group_id": group_id,
+                                "message_id": f"msg-{i}",
+                                "sender_inbox_id": f"inbox-other-{i}",
+                                "content": f"prophecy number {i}",
+                                "sent_at_ns": str(1_000_000_000 + i),
+                            },
+                        }
+                    )
+            elif mode == "stream_flood":
+                # More than the queue's max_size (100) to exercise overflow.
+                for i in range(150):
+                    _write(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "stream_event",
+                            "params": {
+                                "stream_id": stream_id,
+                                "group_id": group_id,
+                                "message_id": f"msg-{i}",
+                                "sender_inbox_id": "sender",
+                                "content": f"m{i}",
+                                "sent_at_ns": str(i),
+                            },
+                        }
+                    )
+        elif method == "stream_stop":
+            _write(
+                {"jsonrpc": "2.0", "id": msg_id, "result": {"stopped": True}}
+            )
         elif method == "shutdown":
             _write({"jsonrpc": "2.0", "id": msg_id, "result": {"ok": True}})
             sys.stdout.flush()

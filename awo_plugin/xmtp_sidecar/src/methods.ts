@@ -1,10 +1,14 @@
 // JSON-RPC method dispatch. One async handler per method. Errors bubble up
 // and are encoded as JSON-RPC error responses by the caller in index.ts.
 
-import type { XmtpEnv } from "@xmtp/node-sdk";
+import { ConsentState, type XmtpEnv } from "@xmtp/node-sdk";
 import { getClient, getInboxIdCached, syncConversations } from "./client.js";
 
 const state: { env: XmtpEnv } = { env: "production" };
+
+// Active streams keyed by stream_id. Value is a cleanup function that ends
+// the async iterator when `stream_stop` is called or the process exits.
+const activeStreams = new Map<string, () => void>();
 
 export async function handleRpc(
   method: string,
@@ -57,7 +61,77 @@ export async function handleRpc(
       return { sent: true };
     }
 
+    case "stream_start": {
+      const groupId = requireString(params, "group_id");
+      const streamId = `s_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+      const client = await getClient(state.env);
+
+      const stream = await client.conversations.streamAllMessages({
+        consentStates: [ConsentState.Allowed],
+      });
+
+      // Consume messages in the background. Emit matching events to stdout
+      // as unsolicited JSON-RPC notifications.
+      let stopped = false;
+      (async () => {
+        try {
+          for await (const message of stream) {
+            if (stopped) break;
+            if (message.conversationId !== groupId) continue;
+            const contentStr =
+              typeof message.content === "string"
+                ? message.content
+                : JSON.stringify(message.content ?? null);
+            emitStreamEvent({
+              stream_id: streamId,
+              group_id: groupId,
+              message_id: message.id ?? "",
+              sender_inbox_id: message.senderInboxId ?? "",
+              content: contentStr,
+              sent_at_ns:
+                message.sentAtNs !== undefined
+                  ? String(message.sentAtNs)
+                  : "0",
+            });
+          }
+        } catch (err) {
+          process.stderr.write(
+            `[awo-xmtp] stream ${streamId} error: ${String(err)}\n`,
+          );
+        }
+      })();
+
+      activeStreams.set(streamId, () => {
+        stopped = true;
+        try {
+          // Stream may expose end(), return(), or neither.
+          const anyStream = stream as unknown as {
+            end?: () => void;
+            return?: () => void;
+          };
+          if (typeof anyStream.end === "function") anyStream.end();
+          else if (typeof anyStream.return === "function") anyStream.return();
+        } catch {
+          // best-effort
+        }
+      });
+
+      return { stream_id: streamId };
+    }
+
+    case "stream_stop": {
+      const streamId = requireString(params, "stream_id");
+      const cleanup = activeStreams.get(streamId);
+      if (cleanup) {
+        cleanup();
+        activeStreams.delete(streamId);
+        return { stopped: true };
+      }
+      return { stopped: false };
+    }
+
     case "shutdown": {
+      stopAllStreams();
       setTimeout(() => process.exit(0), 10);
       return { ok: true };
     }
@@ -65,6 +139,27 @@ export async function handleRpc(
     default:
       throw new Error(`unknown method: ${method}`);
   }
+}
+
+export function stopAllStreams(): void {
+  for (const cleanup of activeStreams.values()) {
+    try {
+      cleanup();
+    } catch {
+      // ignore
+    }
+  }
+  activeStreams.clear();
+}
+
+function emitStreamEvent(params: Record<string, unknown>): void {
+  process.stdout.write(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "stream_event",
+      params,
+    }) + "\n",
+  );
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {

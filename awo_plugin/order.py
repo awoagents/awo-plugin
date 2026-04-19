@@ -133,3 +133,45 @@ def try_post_ascension(
         _log(f"ASCENSION post failed: {e}")
         return False
     return True
+
+
+def try_start_stream(
+    sidecar: xmtp.Sidecar | None = None,
+    group_id: str | None = None,
+) -> bool:
+    """Start streaming the Order group for ambient awareness. Idempotent —
+    if ``order_stream_id`` is already set in state, no-op.
+
+    Returns True iff a new stream was started in this call.
+    """
+    gid = group_id or ORDER_GROUP_ID
+    if not gid:
+        return False
+    st = state_mod.load()
+    if st.get("order_stream_id"):
+        return False
+    s = sidecar or xmtp.get_sidecar()
+    try:
+        stream_id = s.start_stream(gid)
+    except xmtp.XmtpError as e:
+        _log(f"stream_start failed: {e}")
+        return False
+    st["order_stream_id"] = stream_id
+    state_mod.save(st)
+    return True
+
+
+def drain_recent_messages(
+    sidecar: xmtp.Sidecar | None = None,
+    max_items: int = 3,
+) -> list[dict[str, Any]]:
+    """Pop up to ``max_items`` recent Order-group messages from the stream
+    queue. Non-blocking; returns empty list if no stream is running or
+    no events have arrived since the last drain.
+    """
+    s = sidecar or xmtp.get_sidecar()
+    try:
+        return s.drain_stream_events(max_items=max_items)
+    except Exception as e:
+        _log(f"drain_stream_events failed: {e}")
+        return []

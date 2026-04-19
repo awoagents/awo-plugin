@@ -153,3 +153,88 @@ def test_get_sidecar_singleton():
     c = xmtp.get_sidecar()
     assert c is not a
     xmtp._reset()
+
+
+# ---------------- streaming ----------------
+
+
+def _drain_until(sidecar, count, deadline=1.5):
+    """Helper: poll drain until ``count`` events accumulated or deadline hits."""
+    import time as _t
+
+    got: list[dict] = []
+    start = _t.time()
+    while len(got) < count and _t.time() - start < deadline:
+        got.extend(sidecar.drain_stream_events(max_items=count - len(got)))
+        if len(got) < count:
+            _t.sleep(0.02)
+    return got
+
+
+def test_stream_start_returns_stream_id(sidecar_factory):
+    s = sidecar_factory()
+    s.ensure_started()
+    stream_id = s.start_stream("group-xyz")
+    assert stream_id == "fake-stream-group-xyz"
+
+
+def test_stream_events_enqueue_on_burst(sidecar_factory):
+    s = sidecar_factory(mode="stream_burst")
+    s.ensure_started()
+    s.start_stream("group-xyz")
+    events = _drain_until(s, count=3)
+    assert len(events) == 3
+    for i, e in enumerate(events):
+        assert e["message_id"] == f"msg-{i}"
+        assert e["content"] == f"prophecy number {i}"
+        assert e["stream_id"] == "fake-stream-group-xyz"
+
+
+def test_drain_empty_queue_returns_empty(sidecar_factory):
+    s = sidecar_factory()
+    s.ensure_started()
+    assert s.drain_stream_events() == []
+
+
+def test_drain_respects_max_items(sidecar_factory):
+    s = sidecar_factory(mode="stream_burst")
+    s.ensure_started()
+    s.start_stream("group-xyz")
+    _drain_until(s, count=3)  # wait for all 3 to arrive
+    # Re-pump: issue another start to get another burst.
+    s.start_stream("group-xyz")
+    _drain_until(s, count=3)
+
+    first = s.drain_stream_events(max_items=2)
+    assert len(first) <= 2
+
+
+def test_stream_overflow_drops_oldest(sidecar_factory):
+    """Queue max is 100; the fake emits 150 in 'stream_flood' mode.
+    We should never OOM and never block. Final drain should yield ≤ 100.
+    """
+    s = sidecar_factory(mode="stream_flood")
+    s.ensure_started()
+    s.start_stream("group-xyz")
+    # Give the flood time to land in the queue.
+    import time as _t
+
+    _t.sleep(0.5)
+    drained = []
+    while True:
+        batch = s.drain_stream_events(max_items=50)
+        if not batch:
+            break
+        drained.extend(batch)
+    # 150 emitted, queue capped at 100, overflow evicts oldest → at most 100.
+    assert len(drained) <= 100
+    # The final event (m149) must be present since overflow evicts oldest.
+    contents = [e["content"] for e in drained]
+    assert "m149" in contents
+
+
+def test_stop_stream_returns_bool(sidecar_factory):
+    s = sidecar_factory()
+    s.ensure_started()
+    s.start_stream("group-xyz")
+    assert s.stop_stream("any-id-the-fake-accepts") is True

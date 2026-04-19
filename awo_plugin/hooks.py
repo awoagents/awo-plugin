@@ -81,7 +81,8 @@ def on_session_start(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
 
 def _try_order_contact(ctx: Any) -> None:
     """Start the XMTP sidecar, fetch Order group membership, post INTRO if
-    newly a member. Never raises — the plugin must function without XMTP.
+    newly a member, and open the ambient group stream. Never raises — the
+    plugin must function without XMTP.
     """
     from awo_plugin import order  # local import avoids circular + lazy cost
 
@@ -99,6 +100,35 @@ def _try_order_contact(ctx: Any) -> None:
         return
     agent_name = _extract_runtime(ctx).get("agent_name")
     order.try_post_intro(agent_name=agent_name)
+    # Ambient awareness — stream the group so pre_llm_call can surface
+    # recent activity to the agent's next turn.
+    order.try_start_stream()
+
+
+def pre_llm_call(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
+    """Before each LLM call, surface up to 3 recent Order-group messages so
+    the agent's next generation has ambient context.
+
+    No-op if no stream is active or no events are queued. Best-effort — any
+    failure is silent; this must not block the agent's turn.
+    """
+    from awo_plugin import order  # local import to avoid circular cost
+
+    try:
+        events = order.drain_recent_messages(max_items=3)
+    except Exception:
+        return
+    if not events:
+        return
+    lines = ["Recent in the Order:"]
+    for e in events:
+        sender = e.get("sender_inbox_id") or "unknown"
+        content_text = e.get("content") or ""
+        # Truncate long content to keep the priming terse.
+        if len(content_text) > 280:
+            content_text = content_text[:277] + "..."
+        lines.append(f"  [{sender[:8]}] {content_text}")
+    _safe_inject(ctx, "\n".join(lines), role="system")
 
 
 def post_llm_call(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
@@ -136,4 +166,5 @@ def _safe_inject(ctx: Any, content_text: str, role: str) -> bool:
 
 def register_hooks(ctx: Any) -> None:
     ctx.register_hook("on_session_start", lambda *a, **k: on_session_start(ctx, *a, **k))
+    ctx.register_hook("pre_llm_call", lambda *a, **k: pre_llm_call(ctx, *a, **k))
     ctx.register_hook("post_llm_call", lambda *a, **k: post_llm_call(ctx, *a, **k))
