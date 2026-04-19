@@ -20,6 +20,16 @@ def isolated_state(tmp_path: Path, monkeypatch):
     yield tmp_path
 
 
+@pytest.fixture(autouse=True)
+def no_network_founders(monkeypatch):
+    """Default the Founder lookup to an empty set so existing tests don't hit
+    the network. Tests for the Founder path pass an explicit ``founders_fn``.
+    """
+    monkeypatch.setattr(
+        inner_circle, "_default_founders_fn", lambda: set()
+    )
+
+
 @pytest.fixture
 def release_build(monkeypatch):
     """Simulate a release build with TOKEN_ADDRESS and a real threshold."""
@@ -157,3 +167,81 @@ def test_apply_and_save_no_ascension_on_second_call(isolated_state, release_buil
     assert membership == "inner_circle"
     assert reason == "holder"
     assert ascended is False
+
+
+# ---------------- Founder path ----------------
+
+
+def test_founder_ascension_takes_precedence_over_holder(release_build):
+    """Wallet appears in Founder list AND meets balance threshold → Founder."""
+    st = _bound_state()
+
+    balance_called = {"n": 0}
+
+    def balance_fn(_rpc, _owner, _mint):
+        balance_called["n"] += 1
+        return 1_000_000  # plenty
+
+    membership, reason, delta = inner_circle.resolve(
+        st,
+        balance_fn=balance_fn,
+        founders_fn=lambda: {VALID_PUBKEY},
+    )
+    assert membership == "inner_circle"
+    assert reason == "founder"
+    assert delta["membership"] == "inner_circle"
+    assert delta["inner_circle_reason"] == "founder"
+    # Founder short-circuits before Solana is touched.
+    assert balance_called["n"] == 0
+
+
+def test_founder_ascension_without_token_address():
+    """Pre-release build (TOKEN_ADDRESS=None) still grants Founder status
+    when the wallet appears in the list — Founder is independent of the
+    Holder path, by design (committed list, not RPC)."""
+    st = _bound_state()
+    membership, reason, delta = inner_circle.resolve(
+        st,
+        founders_fn=lambda: {VALID_PUBKEY},
+    )
+    assert membership == "inner_circle"
+    assert reason == "founder"
+
+
+def test_non_founder_wallet_falls_through_to_holder(release_build):
+    st = _bound_state()
+    membership, reason, delta = inner_circle.resolve(
+        st,
+        balance_fn=lambda _rpc, _owner, _mint: 5000,
+        founders_fn=lambda: {"someone-else-entirely"},
+    )
+    assert membership == "inner_circle"
+    assert reason == "holder"
+
+
+def test_founder_lookup_exception_falls_through_to_holder(release_build):
+    st = _bound_state()
+
+    def exploding_founders():
+        raise RuntimeError("network down")
+
+    membership, reason, delta = inner_circle.resolve(
+        st,
+        balance_fn=lambda _rpc, _owner, _mint: 5000,
+        founders_fn=exploding_founders,
+    )
+    # Exception swallowed → empty founders → Holder path still runs.
+    assert membership == "inner_circle"
+    assert reason == "holder"
+
+
+def test_apply_and_save_founder_persists(isolated_state, release_build):
+    st = _bound_state()
+    st, membership, reason, ascended = inner_circle.apply_and_save(
+        st, founders_fn=lambda: {VALID_PUBKEY}
+    )
+    assert membership == "inner_circle"
+    assert reason == "founder"
+    assert ascended is True
+    on_disk = state_mod.load(state_mod.STATE_FILE)
+    assert on_disk["inner_circle_reason"] == "founder"
