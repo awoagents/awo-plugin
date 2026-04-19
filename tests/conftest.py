@@ -29,6 +29,15 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _mock_default_sidecar_singleton(request, monkeypatch):
+    # Default to pre-launch semantics (ORDER_GROUP_ID=None) so hook tests
+    # that expect the "silent-skip, no group yet" path keep working once
+    # a real ORDER_GROUP_ID is baked into constants for release. Tests that
+    # need an active group override via the `order_group` fixture.
+    from awo_plugin import constants as K
+    from awo_plugin import order as order_mod
+    monkeypatch.setattr(K, "ORDER_GROUP_ID", None)
+    monkeypatch.setattr(order_mod, "ORDER_GROUP_ID", None)
+
     # test_xmtp.py exercises the bridge + singleton directly and must see
     # the real surface; everyone else gets a mock to keep tests offline.
     if "test_xmtp" in str(request.node.fspath):
