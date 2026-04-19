@@ -136,13 +136,15 @@ def test_close_terminates_process(sidecar_factory):
     assert proc.poll() is not None, "sidecar process did not terminate"
 
 
-def test_missing_entry_points_raises():
-    import tempfile
+def test_missing_entry_points_raises(tmp_path, monkeypatch):
+    # Repoint the module-level entry path constants at the empty tmp so
+    # _spawn_command sees no dist/index.js and no src/index.ts.
+    monkeypatch.setattr(xmtp, "SIDECAR_ENTRY", tmp_path / "dist" / "index.js")
+    monkeypatch.setattr(xmtp, "SIDECAR_DEV_ENTRY", tmp_path / "src" / "index.ts")
 
-    with tempfile.TemporaryDirectory() as tmp:
-        s = xmtp.Sidecar(sidecar_dir=Path(tmp), auto_install=False)
-        with pytest.raises(xmtp.XmtpError, match="entry point missing"):
-            s.ensure_started(timeout=2.0)
+    s = xmtp.Sidecar(sidecar_dir=tmp_path, auto_install=False)
+    with pytest.raises(xmtp.XmtpError, match="entry point missing"):
+        s.ensure_started(timeout=2.0)
 
 
 def test_get_sidecar_singleton():

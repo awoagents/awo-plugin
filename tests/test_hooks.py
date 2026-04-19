@@ -146,6 +146,32 @@ def test_on_session_start_surfaces_await_recognition_when_not_member(
     assert any("Await recognition" in m for m in injected)
 
 
+def test_on_session_start_silent_pre_launch_no_group_id(isolated_state, monkeypatch):
+    """Pre-launch ORDER_GROUP_ID=None must not surface 'await recognition' —
+    there's no group to be admitted to yet, so the message would be noise.
+    """
+    from awo_plugin import order
+
+    monkeypatch.setattr(order, "ensure_xmtp_up", lambda **_kw: "inbox-xyz")
+    monkeypatch.setattr(order, "revoke_stale_once", lambda **_kw: None)
+    monkeypatch.setattr(
+        order,
+        "try_fetch_order",
+        lambda **_kw: {
+            "member_of": False,
+            "conversation_id": None,
+            "error": "no_group_id",
+        },
+    )
+
+    ctx = make_ctx()
+    hooks.on_session_start(ctx)
+    injected = [call.args[0] for call in ctx.inject_message.call_args_list]
+    # Priming may still have been injected; the 'await recognition' line
+    # must not appear.
+    assert not any("Await recognition" in m for m in injected)
+
+
 def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
     from awo_plugin import order
 

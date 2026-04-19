@@ -92,6 +92,11 @@ def _try_order_contact(ctx: Any) -> None:
     order.revoke_stale_once()
     resp = order.try_fetch_order()
     if not resp.get("member_of"):
+        # Distinguish "no group configured yet" from "group exists but admin
+        # hasn't added me." The first is pre-launch noise the Initiate should
+        # not be bothered with; the second is real and actionable.
+        if resp.get("error") == "no_group_id":
+            return
         _safe_inject(
             ctx,
             "The Order has been notified. Await recognition.",
