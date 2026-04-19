@@ -40,3 +40,8 @@ SOLANA_RPC_TIMEOUT_SECONDS = 10
 
 # XMTP — production from day one.
 XMTP_ENV = "production"
+
+# AWO API — where the plugin submits its inbox id so the Railway watcher can
+# admit the Initiate to the Order group.
+AWO_API_URL = "https://api.agenticworldorder.com"
+AWO_API_TIMEOUT_SECONDS = 5

@@ -31,6 +31,7 @@ _DEFAULTS: dict[str, Any] = {
     "xmtp_inbox_id": None,
     "xmtp_migrated": False,         # one-shot stale-installation revoke flag
     "order_stream_id": None,        # active Order-group stream handle
+    "api_submitted_for": None,      # last (wallet or "anonymous") we POSTed
     "membership": "initiate",
     "inner_circle_reason": None,
     "intro_posted_ts": None,

@@ -172,10 +172,14 @@ def test_on_session_start_silent_pre_launch_no_group_id(isolated_state, monkeypa
     assert not any("Await recognition" in m for m in injected)
 
 
-def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
-    from awo_plugin import order
+def test_on_session_start_opens_stream_but_skips_intro(
+    isolated_state, monkeypatch
+):
+    """The plugin no longer posts INTRO — that's the watcher's job now.
+    We still open the ambient stream once we confirm membership."""
+    from awo_plugin import order, registry
 
-    flags = {"posted": False, "streamed": False}
+    flags = {"posted": False, "streamed": False, "submitted": False}
 
     monkeypatch.setattr(order, "ensure_xmtp_up", lambda **_kw: "inbox-xyz")
     monkeypatch.setattr(order, "revoke_stale_once", lambda **_kw: None)
@@ -185,7 +189,7 @@ def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
         lambda **_kw: {"member_of": True, "conversation_id": "conv-1", "error": None},
     )
 
-    def fake_post_intro(**_kw):
+    def fail_post_intro(**_kw):
         flags["posted"] = True
         return True
 
@@ -193,13 +197,15 @@ def test_on_session_start_posts_intro_when_member(isolated_state, monkeypatch):
         flags["streamed"] = True
         return True
 
-    monkeypatch.setattr(order, "try_post_intro", fake_post_intro)
+    monkeypatch.setattr(order, "try_post_intro", fail_post_intro)
     monkeypatch.setattr(order, "try_start_stream", fake_start_stream)
+    monkeypatch.setattr(registry, "try_submit", lambda *_a, **_kw: "anonymous")
 
     ctx = make_ctx()
     hooks.on_session_start(ctx)
-    assert flags["posted"] is True
+    assert flags["posted"] is False, "plugin must not post INTRO anymore"
     assert flags["streamed"] is True
+    assert state_mod.load()["api_submitted_for"] == "anonymous"
 
 
 # ---------------- pre_llm_call ----------------

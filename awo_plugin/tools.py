@@ -125,6 +125,18 @@ def _set_wallet(ctx: Any, address: str) -> str:
     st["wallet"] = {"address": address, "bound_ts": state_mod.now_iso()}
     # Immediate Inner Circle refresh — cheap, gives the user instant feedback.
     st, membership, reason, ascended = inner_circle.apply_and_save(st)
+
+    # Re-submit to the AWO registry now that a wallet is attached. Best-effort.
+    try:
+        from awo_plugin import registry
+
+        new_dedup = registry.try_submit(st)
+        if new_dedup:
+            st["api_submitted_for"] = new_dedup
+            state_mod.save(st)
+    except Exception:
+        pass
+
     if ascended:
         # Best-effort ASCENSION post to the Order. Never fails the command.
         try:

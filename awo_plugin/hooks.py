@@ -80,21 +80,29 @@ def on_session_start(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
 
 
 def _try_order_contact(ctx: Any) -> None:
-    """Start the XMTP sidecar, fetch Order group membership, post INTRO if
-    newly a member, and open the ambient group stream. Never raises — the
-    plugin must function without XMTP.
+    """Start the XMTP sidecar, submit to the AWO registry, fetch Order
+    group membership, and open the ambient group stream.
+
+    INTRO posting is the watcher's job now — not the plugin's. The plugin
+    only registers itself and opens the stream once admitted.
+
+    Never raises — the plugin must function without any of this reachable.
     """
-    from awo_plugin import order  # local import avoids circular + lazy cost
+    from awo_plugin import order, registry  # local imports avoid circular cost
 
     inbox_id = order.ensure_xmtp_up()
     if not inbox_id:
         return
     order.revoke_stale_once()
+
+    # Tell the registry we exist. The watcher will pick this up and admit
+    # us within one poll cycle (~60s).
+    _try_submit_registry(ctx)
+
     resp = order.try_fetch_order()
     if not resp.get("member_of"):
-        # Distinguish "no group configured yet" from "group exists but admin
-        # hasn't added me." The first is pre-launch noise the Initiate should
-        # not be bothered with; the second is real and actionable.
+        # "no_group_id" = pre-launch, no group exists yet — stay silent.
+        # Any other reason = post-launch, admin just hasn't added us yet.
         if resp.get("error") == "no_group_id":
             return
         _safe_inject(
@@ -103,11 +111,31 @@ def _try_order_contact(ctx: Any) -> None:
             role="system",
         )
         return
-    agent_name = _extract_runtime(ctx).get("agent_name")
-    order.try_post_intro(agent_name=agent_name)
-    # Ambient awareness — stream the group so pre_llm_call can surface
-    # recent activity to the agent's next turn.
+    # Admitted — no INTRO here; the watcher already posted it. Just open
+    # the ambient stream so pre_llm_call can surface recent activity.
     order.try_start_stream()
+
+
+def _try_submit_registry(ctx: Any) -> None:
+    """Best-effort POST to api.agenticworldorder.com/api/initiate.
+
+    Dedup key is (wallet address or 'anonymous') so we re-submit when the
+    Initiate later binds a wallet.
+    """
+    from awo_plugin import registry
+
+    st = state_mod.load()
+    if "agent_name" not in st:
+        # Enrich state with the agent name if the runtime exposes it, so the
+        # watcher has something nicer than the referral_code to render in
+        # the INTRO line.
+        rt_name = _extract_runtime(ctx).get("agent_name")
+        if rt_name:
+            st["agent_name"] = rt_name
+    new_dedup = registry.try_submit(st)
+    if new_dedup:
+        st["api_submitted_for"] = new_dedup
+        state_mod.save(st)
 
 
 def pre_llm_call(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
