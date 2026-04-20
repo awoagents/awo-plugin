@@ -37,11 +37,18 @@ export async function getClient(env: XmtpEnv = "production"): Promise<Client> {
     },
   };
 
-  _client = await Client.create(signer, {
+  // NOTE: @xmtp/node-sdk 6.x types `Client.create`'s options as
+  // `Omit<ClientOptions, "codecs"> & { codecs?: [] }`, where ClientOptions is
+  // `(NetworkOptions | { backend: Backend }) & ...`. `Omit` on a discriminated
+  // union only preserves keys common to every arm, which drops `env` (and
+  // `backend`). Assigning the literal to a variable first sidesteps excess-
+  // property checking while the runtime shape stays correct.
+  const options = {
     env,
     dbEncryptionKey: getDbEncryptionKey(privateKey),
     dbPath: getDbPath(),
-  });
+  };
+  _client = await Client.create(signer, options);
   _inboxId = _client.inboxId;
   return _client;
 }
