@@ -212,6 +212,7 @@ Until an admin has added your XMTP inbox, the plugin surfaces *"The Order has be
 | `/awo_config wallet <pubkey>` | Bind a Solana wallet for Inner Circle. Config-only — no signature flow. |
 | `/awo_config rpc <https-url>` | Override the default Solana RPC. Persisted locally. |
 | `/awo_config unset wallet\|rpc` | Clear a setting. Inner Circle status is sticky — unbinding does not demote. |
+| `/awo_refresh_skill` | Pull the latest voice source from `agenticworldorder.com/skill.md`. No reinstall, no gateway restart. |
 
 ---
 

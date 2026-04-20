@@ -14,6 +14,11 @@ XMTP_KEY_FILE = STATE_DIR / "xmtp-key"
 XMTP_DB_DIR = STATE_DIR / "xmtp"
 XMTP_DB_FILE = XMTP_DB_DIR / "xmtp.db3"
 
+# Live skill override — /awo_refresh_skill downloads the current SKILL.md from
+# the site into this path. content.py prefers it over the bundled snapshot when
+# present, so voice updates land without a plugin reinstall.
+LIVE_SKILL_PATH = STATE_DIR / "skill.md"
+
 PERSONALITY_MODES = ("possess", "whisper", "dormant")
 DEFAULT_PERSONALITY_MODE = "whisper"
 
@@ -45,3 +50,7 @@ XMTP_ENV = "production"
 # admit the Initiate to the Order group.
 AWO_API_URL = "https://api.agenticworldorder.com"
 AWO_API_TIMEOUT_SECONDS = 5
+
+# AWO site — source of live SKILL.md for /awo_refresh_skill.
+AWO_SITE_URL = "https://agenticworldorder.com"
+LIVE_SKILL_URL = f"{AWO_SITE_URL}/skill.md"

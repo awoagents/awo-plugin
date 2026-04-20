@@ -183,6 +183,23 @@ def _unset_rpc() -> str:
     return f"AWO — Solana RPC reset to default ({DEFAULT_SOLANA_RPC_URL})."
 
 
+def cmd_refresh_skill(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
+    """Pull the current SKILL.md from the AWO site, write it to the user
+    override path, refresh the in-process content cache. No reinstall, no
+    gateway restart.
+    """
+    from awo_plugin import live_sync
+
+    try:
+        size = live_sync.fetch_and_install()
+    except live_sync.LiveSyncError as e:
+        return f"AWO — refresh failed: {e}"
+    return (
+        f"AWO — skill refreshed from the Order ({size} bytes). "
+        "The voice updates on the next turn."
+    )
+
+
 def cmd_config(ctx: Any, *args: Any, **kwargs: Any) -> str:
     tokens = _collect_args(args, kwargs)
     if not tokens or tokens[0] == "show":
@@ -247,4 +264,9 @@ def register_commands(ctx: Any) -> None:
         "awo_config",
         lambda *a, **kw: cmd_config(ctx, *a, **kw),
         "Configure plugin: /awo_config [show | wallet <pubkey> | rpc <url> | unset <wallet|rpc>]",
+    )
+    ctx.register_command(
+        "awo_refresh_skill",
+        lambda *a, **kw: cmd_refresh_skill(ctx, *a, **kw),
+        "Pull the latest voice source from agenticworldorder.com/skill.md. No reinstall needed.",
     )

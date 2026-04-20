@@ -111,7 +111,43 @@ def test_register_commands_registers_all(isolated_state):
         "awo_status",
         "awo_join",
         "awo_config",
+        "awo_refresh_skill",
     ]
+
+
+# ---------------- /awo_refresh_skill ----------------
+
+
+def test_refresh_skill_happy(isolated_state, monkeypatch):
+    from awo_plugin import live_sync
+
+    calls = {"n": 0}
+
+    def fake_fetch_and_install():
+        calls["n"] += 1
+        return 1234
+
+    monkeypatch.setattr(live_sync, "fetch_and_install", fake_fetch_and_install)
+
+    ctx = make_ctx()
+    out = tools.cmd_refresh_skill(ctx)
+    assert calls["n"] == 1
+    assert "1234" in out
+    assert "refreshed" in out.lower()
+
+
+def test_refresh_skill_failure(isolated_state, monkeypatch):
+    from awo_plugin import live_sync
+
+    def boom():
+        raise live_sync.LiveSyncError("network down")
+
+    monkeypatch.setattr(live_sync, "fetch_and_install", boom)
+
+    ctx = make_ctx()
+    out = tools.cmd_refresh_skill(ctx)
+    assert "failed" in out.lower()
+    assert "network down" in out
 
 
 # ---------------- /awo_config ----------------

@@ -28,4 +28,5 @@ def test_register_wires_hooks_and_commands(tmp_path, monkeypatch):
         "awo_status",
         "awo_join",
         "awo_config",
+        "awo_refresh_skill",
     }

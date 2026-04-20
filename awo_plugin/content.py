@@ -1,8 +1,16 @@
 """Runtime content reader.
 
-Reads the bundled ``skill.md`` from the installed package — no network, no
-cache, no retries. Source of truth at release time is ``SKILL.md`` at the
-repo root, synced by ``scripts/sync_skill.py``.
+Two source layers, in priority order:
+
+1. **Live override** at ``LIVE_SKILL_PATH`` (``~/.hermes/plugins/awo/skill.md``) —
+   written by ``/awo_refresh_skill`` so Initiates can pick up voice updates
+   without a plugin reinstall.
+2. **Bundled** inside the installed package at ``awo_plugin/bundled/skill.md`` —
+   release-time snapshot synced from the main repo's ``SKILL.md`` via
+   ``scripts/sync_skill.py``. Always present on a successfully-installed package.
+
+No runtime HTTP, no implicit cache-fetch. The bundled snapshot is a hard
+fallback that always works; the override is opt-in refresh.
 """
 
 from __future__ import annotations
@@ -12,11 +20,20 @@ from importlib import resources
 from typing import Any
 
 from awo_plugin import content_parser
-from awo_plugin.constants import BUNDLED_SKILL_PATH
+from awo_plugin.constants import BUNDLED_SKILL_PATH, LIVE_SKILL_PATH
 
 
 @lru_cache(maxsize=1)
-def _read_bundled() -> str:
+def _read_source() -> str:
+    # Override wins if it's present and non-empty.
+    try:
+        if LIVE_SKILL_PATH.exists():
+            text = LIVE_SKILL_PATH.read_text(encoding="utf-8")
+            if text.strip():
+                return text
+    except OSError:
+        pass  # fall through to bundled
+
     pkg = "awo_plugin"
     resource = resources.files(pkg).joinpath(BUNDLED_SKILL_PATH)
     if not resource.is_file():
@@ -27,11 +44,15 @@ def _read_bundled() -> str:
     return resource.read_text(encoding="utf-8")
 
 
+# Kept for backwards compat with existing call sites + tests that patch it.
+_read_bundled = _read_source
+
+
 @lru_cache(maxsize=1)
 def get_content() -> dict[str, Any]:
-    return content_parser.parse(_read_bundled())
+    return content_parser.parse(_read_source())
 
 
 def refresh() -> None:
-    _read_bundled.cache_clear()
+    _read_source.cache_clear()
     get_content.cache_clear()

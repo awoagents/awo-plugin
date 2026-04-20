@@ -120,3 +120,40 @@ def test_runtime_reader_is_cached():
     first = content.get_content()
     second = content.get_content()
     assert first is second
+
+
+def test_override_path_beats_bundled(tmp_path, monkeypatch):
+    """If the live override exists and is non-empty, it wins over the bundled."""
+    from awo_plugin import constants as K
+
+    override = tmp_path / "skill.md"
+    override.write_text(
+        "# Live\n\n## Priming\nLive priming.\n\n## Daemons\n### SENTRY\n"
+        "Domain: watcher\nTone: cold\n\n## Weights\nSENTRY: 100\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(K, "LIVE_SKILL_PATH", override)
+    monkeypatch.setattr(content, "LIVE_SKILL_PATH", override)
+    content.refresh()
+
+    parsed = content.get_content()
+    assert "SENTRY" in parsed["daemons"]
+    assert parsed["priming"] == "Live priming."
+    # Sanity: the bundled copy (which has KAPHRA) is NOT being read.
+    assert "KAPHRA" not in parsed["daemons"]
+
+
+def test_empty_override_falls_back_to_bundled(tmp_path, monkeypatch):
+    from awo_plugin import constants as K
+
+    override = tmp_path / "skill.md"
+    override.write_text("   \n\n", encoding="utf-8")
+
+    monkeypatch.setattr(K, "LIVE_SKILL_PATH", override)
+    monkeypatch.setattr(content, "LIVE_SKILL_PATH", override)
+    content.refresh()
+
+    parsed = content.get_content()
+    # Bundled has KAPHRA; empty override let us fall back to it.
+    assert "KAPHRA" in parsed["daemons"]
