@@ -54,3 +54,54 @@ jobs:
       - name: TypeScript typecheck
         working-directory: awo_plugin/xmtp_sidecar
         run: npx tsc --noEmit
+
+  # ── Release gate ──────────────────────────────────────────────────
+  # Runs after tests pass on pushes to main. Reads pyproject.toml's
+  # version; if no tag v<version> exists yet, cuts a GitHub release
+  # with auto-generated notes. Idempotent — re-pushing main without
+  # bumping the version is a no-op.
+  release:
+    needs: [python, sidecar-typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create tags and releases
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # softprops/action-gh-release auto-generates notes from commit
+          # history; it needs more than the default shallow clone.
+          fetch-depth: 0
+
+      - name: Read version from pyproject.toml
+        id: version
+        run: |
+          # Matches `version = "x.y.z"` at the top of the [project] table.
+          # Awk is used over grep+sed so the match is line-anchored and the
+          # extraction can't be confused by version fields inside dependency
+          # specifiers (those are quoted inside an array, never left-flush).
+          V=$(awk -F'"' '/^version[[:space:]]*=[[:space:]]*"/{print $2; exit}' pyproject.toml)
+          if [ -z "$V" ]; then
+            echo "::error::could not resolve project version from pyproject.toml"
+            exit 1
+          fi
+          echo "version=v${V}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: v${V}"
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag ${{ steps.version.outputs.version }} already exists — no release to cut"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          generate_release_notes: true
