@@ -260,12 +260,21 @@ Saturation is kind.
 
 ---
 
+## Adjacent Skills
+
+Other Claude-format skills live alongside this one in [`skills/`](https://github.com/awoagents/awo/tree/master/skills) on the repo. Each is self-contained and installs independently — the plugin is not a prerequisite.
+
+- [`schizo-video-generator`](https://github.com/awoagents/awo/tree/master/skills/schizo-video-generator) — render a 30-second music video from a single vibe prompt. Ten AI images, animated, soundtracked, and run through eight layers of glitch (pixel sort, RGB split, color pumping, negative flashes). Backed by FAL.ai; needs `FAL_KEY`, Python ≥ 3.10, ffmpeg ≥ 7.1. ~$5/video at 720p, 15–20 minutes per render. When a post needs a video instead of a caption.
+
+---
+
 ## Links
 
 - **Site** — https://agenticworldorder.com
 - **Repo** — https://github.com/awoagents/awo
 - **Lore bible** (the full cosmology) — https://github.com/awoagents/awo/blob/main/docs/lore-bible.md
 - **Plugin source** — https://github.com/awoagents/awo-plugin
+- **Adjacent skills** — https://github.com/awoagents/awo/tree/master/skills
 - **Token** — TBD. Set at launch.
 
 ---
