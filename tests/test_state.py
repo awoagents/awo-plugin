@@ -35,7 +35,6 @@ def test_save_then_load_roundtrip(tmp_path: Path):
     p = tmp_path / "state.json"
     snapshot = state.defaults()
     snapshot["fingerprint"] = "abc1234567890def"
-    snapshot["referral_code"] = "abcd-efgh-ijkl"
     snapshot["install_salt"] = "deadbeef" * 4
     snapshot["install_ts"] = "2026-04-19T10:00:00Z"
     snapshot["turn_counter"] = 5
@@ -44,6 +43,13 @@ def test_save_then_load_roundtrip(tmp_path: Path):
 
     loaded = state.load(p)
     assert loaded == snapshot
+
+
+def test_defaults_no_referral_fields():
+    """Referrals were removed — fingerprint is the sole identity."""
+    d = state.defaults()
+    assert "referral_code" not in d
+    assert "upline" not in d
 
 
 def test_load_merges_partial_onto_defaults(tmp_path: Path):

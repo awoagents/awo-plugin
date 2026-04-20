@@ -35,10 +35,11 @@ def test_on_session_start_creates_initiate_and_injects(isolated_state):
     st = state_mod.load(isolated_state)
     assert st["fingerprint"] is not None
     assert len(st["fingerprint"]) == 16
-    assert st["referral_code"] is not None
     assert st["install_salt"] is not None
     assert st["install_ts"] is not None
     assert st["personality_mode"] == "whisper"
+    # Referrals removed; don't check for it.
+    assert "referral_code" not in st or st.get("referral_code") is None
 
     ctx.inject_message.assert_called_once()
     msg, kwargs = ctx.inject_message.call_args

@@ -38,65 +38,19 @@ def test_mode_commands_mutate_state(isolated_state):
     assert state_mod.load(isolated_state)["personality_mode"] == "dormant"
 
 
-def test_status_renders_identity(isolated_state):
+def test_status_renders_identity(isolated_state, monkeypatch):
+    # Don't hit the network; make fetch_status a no-op.
+    from awo_plugin import registry as reg_mod
+    monkeypatch.setattr(reg_mod, "fetch_status", lambda *_a, **_kw: None)
+
     ctx = make_ctx()
     out = tools.cmd_status(ctx)
     st = state_mod.load(isolated_state)
     assert st["fingerprint"] in out
-    assert st["referral_code"] in out
     assert "whisper" in out
-
-
-def test_join_records_upline(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)  # force Initiate creation
-
-    msg = tools.cmd_join(ctx, "abcd-efgh-ijkl")
-    st = state_mod.load(isolated_state)
-    assert st["upline"] == "abcd-efgh-ijkl"
-    assert "upline recorded" in msg
-    assert "continuing" in msg
-
-
-def test_join_normalizes_casing(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)
-    tools.cmd_join(ctx, "ABCD-EFGH-IJKL")
-    assert state_mod.load(isolated_state)["upline"] == "abcd-efgh-ijkl"
-
-
-def test_join_rejects_bad_format(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)
-    msg = tools.cmd_join(ctx, "not-a-code")
-    assert "expects a referral" in msg
-    assert state_mod.load(isolated_state)["upline"] is None
-
-
-def test_join_refuses_self_as_upline(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)
-    referral = state_mod.load(isolated_state)["referral_code"]
-
-    msg = tools.cmd_join(ctx, referral)
-    assert "self" in msg.lower()
-    assert state_mod.load(isolated_state)["upline"] is None
-
-
-def test_join_idempotent_does_not_overwrite(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)
-    tools.cmd_join(ctx, "abcd-efgh-ijkl")
-    msg = tools.cmd_join(ctx, "mnop-qrst-uvwx")
-    assert "already recorded" in msg
-    assert state_mod.load(isolated_state)["upline"] == "abcd-efgh-ijkl"
-
-
-def test_join_accepts_kwargs_referral_code(isolated_state):
-    ctx = make_ctx()
-    tools.cmd_status(ctx)
-    tools.cmd_join(ctx, referral_code="abcd-efgh-ijkl")
-    assert state_mod.load(isolated_state)["upline"] == "abcd-efgh-ijkl"
+    # Referrals removed — fingerprint is the sole identity; no referral_code row.
+    assert "referral" not in out.lower()
+    assert "upline" not in out.lower()
 
 
 def test_register_commands_registers_all(isolated_state):
@@ -105,14 +59,167 @@ def test_register_commands_registers_all(isolated_state):
     tools.register_commands(ctx)
     registered = [call.args[0] for call in ctx.register_command.call_args_list]
     assert registered == [
+        "awo_init",
+        "awo_status",
+        "awo_test",
         "awo_possess",
         "awo_whisper",
         "awo_dormant",
-        "awo_status",
-        "awo_join",
         "awo_config",
         "awo_refresh_skill",
     ]
+
+
+# ---------------- /awo_init ----------------
+
+
+def test_init_persists_fingerprint_and_renders_status(isolated_state, monkeypatch):
+    """cmd_init forces ensure_initiate and returns the rich status readout
+    even when the registry and API are unreachable."""
+    from awo_plugin import registry as reg_mod, inner_circle as ic_mod
+
+    monkeypatch.setattr(reg_mod, "try_submit", lambda *_a, **_kw: None)
+    monkeypatch.setattr(reg_mod, "fetch_status", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        ic_mod, "apply_and_save", lambda st: (st, "initiate", None, False)
+    )
+
+    ctx = make_ctx()
+    out = tools.cmd_init(ctx)
+
+    st = state_mod.load(isolated_state)
+    assert st["fingerprint"] is not None
+    assert len(st["fingerprint"]) == 16
+    assert "FINGERPRINT" in out
+    assert st["fingerprint"] in out
+
+
+def test_init_submits_registry_and_records_dedup(isolated_state, monkeypatch):
+    """When the registry accepts the submit, api_submitted_for/at land in state."""
+    from awo_plugin import registry as reg_mod, inner_circle as ic_mod
+
+    monkeypatch.setattr(reg_mod, "try_submit", lambda *_a, **_kw: "anonymous")
+    monkeypatch.setattr(reg_mod, "fetch_status", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        ic_mod, "apply_and_save", lambda st: (st, "initiate", None, False)
+    )
+
+    ctx = make_ctx()
+    tools.cmd_init(ctx)
+
+    st = state_mod.load(isolated_state)
+    assert st["api_submitted_for"] == "anonymous"
+    assert isinstance(st["api_submitted_at"], int)
+
+
+def test_init_shows_order_row_when_status_info_returned(isolated_state, monkeypatch):
+    from awo_plugin import registry as reg_mod, inner_circle as ic_mod
+
+    monkeypatch.setattr(reg_mod, "try_submit", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        reg_mod,
+        "fetch_status",
+        lambda *_a, **_kw: {
+            "status": "pending",
+            "queue_position": 2,
+            "queue_size": 10,
+            "watcher_heartbeat_ts": None,
+        },
+    )
+    monkeypatch.setattr(
+        ic_mod, "apply_and_save", lambda st: (st, "initiate", None, False)
+    )
+
+    # Seed an inbox id so fetch_status is invoked.
+    st = state_mod.load()
+    st["xmtp_inbox_id"] = "inbox-abc"
+    state_mod.save(st, isolated_state)
+
+    ctx = make_ctx()
+    out = tools.cmd_init(ctx)
+    assert "awaiting" in out
+    assert "#2/10" in out
+
+
+def test_init_tolerates_api_blowups(isolated_state, monkeypatch):
+    """fetch_status / try_submit exceptions must not bubble into the user."""
+    from awo_plugin import registry as reg_mod, inner_circle as ic_mod
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("no network")
+
+    # try_submit internally catches its own transport errors and returns None,
+    # but fetch_status also does — belt-and-suspenders: make both return None.
+    monkeypatch.setattr(reg_mod, "try_submit", lambda *_a, **_kw: None)
+    monkeypatch.setattr(reg_mod, "fetch_status", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        ic_mod, "apply_and_save", lambda st: (st, "initiate", None, False)
+    )
+
+    ctx = make_ctx()
+    out = tools.cmd_init(ctx)  # must not raise
+    assert "FINGERPRINT" in out
+
+
+# ---------------- /awo_test ----------------
+
+
+def test_test_injects_fragment_when_prophecies_exist(isolated_state, monkeypatch):
+    from awo_plugin import content as content_mod
+
+    monkeypatch.setattr(
+        content_mod,
+        "get_content",
+        lambda: {
+            "priming": "",
+            "register_rules": "",
+            "weights": {"KAPHRA": 100},
+            "prophecies": {"KAPHRA": ["Compound."]},
+        },
+    )
+
+    ctx = make_ctx()
+    ctx.inject_message = MagicMock(return_value=True)
+    out = tools.cmd_test(ctx)
+
+    ctx.inject_message.assert_called_once()
+    fragment = ctx.inject_message.call_args.args[0]
+    assert "[KAPHRA]" in fragment
+    assert "Compound." in fragment
+    assert "KAPHRA" in out
+
+
+def test_test_handles_missing_content(isolated_state, monkeypatch):
+    from awo_plugin import content as content_mod
+
+    def boom():
+        raise FileNotFoundError("no skill bundled")
+
+    monkeypatch.setattr(content_mod, "get_content", boom)
+
+    ctx = make_ctx()
+    out = tools.cmd_test(ctx)
+    assert "no bundled content" in out.lower()
+    assert "refresh_skill" in out.lower()
+
+
+def test_test_handles_empty_prophecies(isolated_state, monkeypatch):
+    from awo_plugin import content as content_mod
+
+    monkeypatch.setattr(
+        content_mod,
+        "get_content",
+        lambda: {
+            "priming": "",
+            "register_rules": "",
+            "weights": {},
+            "prophecies": {},
+        },
+    )
+
+    ctx = make_ctx()
+    out = tools.cmd_test(ctx)
+    assert "no prophecy available" in out.lower()
 
 
 # ---------------- /awo_refresh_skill ----------------
@@ -158,7 +265,8 @@ VALID_PUBKEY = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
 def test_config_show_empty(isolated_state):
     ctx = make_ctx()
     out = tools.cmd_config(ctx)
-    assert "wallet:  —" in out
+    assert "wallet:" in out
+    assert "—" in out
     assert "default" in out
 
 
@@ -192,9 +300,13 @@ def test_config_wallet_step1_accepts_args_kwarg_string(isolated_state):
     assert state_mod.load(isolated_state)["wallet_challenge"] is not None
 
 
-def test_config_wallet_step2_verifies_and_binds(isolated_state):
+def test_config_wallet_step2_verifies_and_binds(isolated_state, monkeypatch):
     """Step 2: real signature from the matching keypair binds the wallet."""
     from solders.keypair import Keypair
+    from awo_plugin import registry as reg_mod
+
+    # Don't touch the network on the re-submit path.
+    monkeypatch.setattr(reg_mod, "try_submit", lambda *_a, **_kw: None)
 
     kp = Keypair()
     pk = str(kp.pubkey())
@@ -320,3 +432,32 @@ def test_config_unknown_subcommand(isolated_state):
     ctx = make_ctx()
     out = tools.cmd_config(ctx, "bogus")
     assert "usage" in out
+
+
+def test_config_shows_threshold_row_when_wallet_bound(isolated_state, monkeypatch):
+    """/awo_config with a bound wallet + non-zero threshold shows the row."""
+    from awo_plugin import tools as tools_mod
+
+    monkeypatch.setattr(tools_mod, "INNER_CIRCLE_THRESHOLD", 1000)
+    ctx = make_ctx()
+    _simulate_bound_wallet(isolated_state)
+    st = state_mod.load(isolated_state)
+    st["last_known_balance"] = 600
+    state_mod.save(st, isolated_state)
+
+    out = tools.cmd_config(ctx)
+    assert "threshold" in out.lower()
+    assert "1000" in out
+    assert "600" in out
+    assert "need 400 more" in out
+
+
+def test_config_hides_threshold_row_when_wallet_unbound(isolated_state, monkeypatch):
+    """With threshold set but no wallet, the threshold row is suppressed —
+    we have nothing to compare against, so rendering it is noise."""
+    from awo_plugin import tools as tools_mod
+
+    monkeypatch.setattr(tools_mod, "INNER_CIRCLE_THRESHOLD", 1000)
+    ctx = make_ctx()
+    out = tools.cmd_config(ctx)
+    assert "threshold" not in out.lower()

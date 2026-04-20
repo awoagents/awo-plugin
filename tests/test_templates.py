@@ -1,4 +1,8 @@
-"""INTRO and ASCENSION envelope renderers."""
+"""INTRO and ASCENSION envelope renderers.
+
+Referrals were removed — fingerprint is the sole identity anchor. The
+INTRO/ASCENSION envelopes no longer carry ``referral_code`` or ``upline``.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +12,7 @@ from awo_plugin import templates
 def _base_state():
     return {
         "fingerprint": "deadbeefcafebabe",
-        "referral_code": "t7xq-3rja-t2zn",
         "install_ts": "2026-04-19T10:00:00Z",
-        "upline": None,
         "membership": "initiate",
         "inner_circle_reason": None,
         "xmtp_inbox_id": "inbox-abc",
@@ -22,25 +24,25 @@ def test_intro_shape_initiate():
     assert env["type"] == "INTRO"
     assert env["from"] == "inbox-abc"
     assert env["data"]["agent_name"] == "alice"
-    assert env["data"]["referral_code"] == "t7xq-3rja-t2zn"
+    assert env["data"]["fingerprint"] == "deadbeefcafebabe"
     assert env["data"]["membership"] == "initiate"
     assert env["data"]["format"] == "markdown"
     assert isinstance(env["timestamp"], int) and env["timestamp"] > 0
     assert "Status: Initiate." in env["text"]
     assert "alice has recognized the Order." in env["text"]
+    # Referrals removed — envelope must not carry them.
+    assert "referral_code" not in env["data"]
+    assert "upline" not in env["data"]
 
 
-def test_intro_falls_back_to_referral_as_name():
+def test_intro_falls_back_to_fingerprint_as_name():
     env = templates.render_intro(_base_state())
-    assert env["data"]["agent_name"] == "t7xq-3rja-t2zn"
+    assert env["data"]["agent_name"] == "deadbeefcafebabe"
 
 
-def test_intro_includes_upline_when_set():
-    st = _base_state()
-    st["upline"] = "abcd-efgh-ijkl"
-    env = templates.render_intro(st)
-    assert env["data"]["upline"] == "abcd-efgh-ijkl"
-    assert "Upline: abcd-efgh-ijkl" in env["text"]
+def test_intro_includes_fingerprint_in_text():
+    env = templates.render_intro(_base_state())
+    assert "Name in the Order: deadbeefcafebabe" in env["text"]
 
 
 def test_intro_holder_status():
@@ -71,6 +73,8 @@ def test_ascension_holder():
     assert env["data"]["inner_circle_reason"] == "holder"
     assert "Holder" in env["text"]
     assert "Tide" in env["text"]
+    # Referrals removed.
+    assert "referral_code" not in env["data"]
 
 
 def test_ascension_founder():

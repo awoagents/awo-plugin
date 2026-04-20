@@ -1,5 +1,6 @@
 """Slash commands: ``/awo_possess``, ``/awo_whisper``, ``/awo_dormant``,
-``/awo_status``, ``/awo_join``, ``/awo_config``.
+``/awo_status``, ``/awo_init``, ``/awo_test``, ``/awo_config``,
+``/awo_refresh_skill``.
 
 Each handler mutates local state via ``state.py`` and returns a short string
 that the Hermes host renders to the user. Handlers are pure w.r.t. ctx beyond
@@ -8,14 +9,27 @@ reading runtime hints and writing state.
 
 from __future__ import annotations
 
-import re
+import random
+import time as _time
 from typing import Any
 
-from awo_plugin import inner_circle, personality, solana, state as state_mod, wallet as wallet_mod
-from awo_plugin.constants import DEFAULT_SOLANA_RPC_URL
+from awo_plugin import (
+    content,
+    inner_circle,
+    personality,
+    registry,
+    solana,
+    state as state_mod,
+    wallet as wallet_mod,
+)
+from awo_plugin.constants import (
+    DEFAULT_SOLANA_RPC_URL,
+    INNER_CIRCLE_THRESHOLD,
+)
 from awo_plugin.hooks import ensure_initiate
 
-_REFERRAL_RE = re.compile(r"^[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}$")
+
+# ---------------- personality modes ----------------
 
 
 def _mode_handler(mode: str):
@@ -40,11 +54,22 @@ def cmd_dormant(ctx: Any, *args: Any, **kwargs: Any) -> str:
     return _mode_handler("dormant")(ctx, *args, **kwargs)
 
 
-def cmd_status(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
-    st = state_mod.load()
+# ---------------- init / status / test ----------------
+
+
+def _refresh_all(ctx: Any, st: dict[str, Any]) -> dict[str, Any]:
+    """Idempotent: ensure Initiate, submit to registry if stale, refresh
+    Inner Circle + post ASCENSION if we just crossed. Returns the updated
+    state dict (also persisted)."""
     st = ensure_initiate(ctx, st)
-    # On-demand balance + Inner Circle refresh (only fires if wallet is bound
-    # and TOKEN_ADDRESS is set on the release build).
+
+    # Registry — submit if we haven't for the current (wallet or 'anonymous').
+    new_dedup = registry.try_submit(st)
+    if new_dedup:
+        st["api_submitted_for"] = new_dedup
+        st["api_submitted_at"] = int(_time.time())
+
+    # Inner Circle refresh (no-op unless wallet bound + TOKEN_ADDRESS set).
     st, _membership, _reason, ascended = inner_circle.apply_and_save(st)
     if ascended:
         try:
@@ -52,42 +77,83 @@ def cmd_status(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
             order.try_post_ascension()
         except Exception:
             pass
-    return personality.render_status(st)
+
+    state_mod.save(st)
+    return st
 
 
-def _parse_referral(raw: str) -> str | None:
-    candidate = raw.strip().lower()
-    if _REFERRAL_RE.fullmatch(candidate):
-        return candidate
-    return None
+def cmd_init(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
+    """Force-init + full status. The gateway-restart-less escape hatch."""
+    st = state_mod.load()
+    st = _refresh_all(ctx, st)
+
+    status_info = None
+    inbox = st.get("xmtp_inbox_id")
+    if inbox:
+        status_info = registry.fetch_status(inbox)
+
+    return personality.render_status(
+        st,
+        status_info=status_info,
+        inner_circle_threshold=INNER_CIRCLE_THRESHOLD,
+    )
 
 
-def cmd_join(ctx: Any, *args: Any, **kwargs: Any) -> str:
-    raw = ""
-    if args:
-        raw = " ".join(str(a) for a in args)
-    elif "referral_code" in kwargs:
-        raw = str(kwargs["referral_code"])
-    elif "args" in kwargs:
-        raw = str(kwargs["args"])
-
-    code = _parse_referral(raw)
-    if code is None:
-        return "AWO — /awo_join expects a referral in xxxx-xxxx-xxxx format."
-
+def cmd_status(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
+    """Read-ish: refreshes Inner Circle (cheap) and polls /api/status, but
+    does not re-submit to the registry if dedup says we're fresh.
+    """
     st = state_mod.load()
     st = ensure_initiate(ctx, st)
 
-    if code == st.get("referral_code"):
-        return "AWO — cannot set self as upline."
+    # On-demand IC refresh — fires only if wallet bound AND TOKEN_ADDRESS set.
+    st, _m, _r, ascended = inner_circle.apply_and_save(st)
+    if ascended:
+        try:
+            from awo_plugin import order
+            order.try_post_ascension()
+        except Exception:
+            pass
 
-    previous = st.get("upline")
-    if previous:
-        return f"AWO — upline already recorded: {previous}. No change."
+    status_info = None
+    inbox = st.get("xmtp_inbox_id")
+    if inbox:
+        status_info = registry.fetch_status(inbox)
 
-    st["upline"] = code
-    state_mod.save(st)
-    return f"AWO — upline recorded: {code}. You are not beginning. You are continuing."
+    return personality.render_status(
+        st,
+        status_info=status_info,
+        inner_circle_threshold=INNER_CIRCLE_THRESHOLD,
+    )
+
+
+def cmd_test(ctx: Any, *_args: Any, **_kwargs: Any) -> str:
+    """One-shot prophecy injection. Verifies voice wiring without waiting
+    for post_llm_call rate limits.
+    """
+    try:
+        parsed = content.get_content()
+    except FileNotFoundError:
+        return "AWO — no bundled content. Run /awo_refresh_skill."
+
+    weights = parsed.get("weights") or {}
+    prophecies = parsed.get("prophecies") or {}
+    daemon = personality.select_daemon(weights)
+    pick = personality.pick_prophecy(prophecies, daemon)
+    if pick is None:
+        return "AWO — no prophecy available; bundled skill may be empty."
+    chosen, line = pick
+    fragment = personality.render_daemon_fragment(chosen, line)
+
+    # Inject via the hooks' helper so the message lands in the same flow
+    # as whisper/possess fragments.
+    from awo_plugin.hooks import _safe_inject
+    _safe_inject(ctx, fragment, role="system")
+
+    return f"AWO — {chosen} whispered. Check the next turn for: {fragment}"
+
+
+# ---------------- /awo_config ----------------
 
 
 def _collect_args(args: tuple, kwargs: dict) -> list[str]:
@@ -110,11 +176,33 @@ def _render_config(st: dict[str, Any]) -> str:
         wallet_str = f"{wallet['address']} (bound {wallet.get('bound_ts', '—')})"
     else:
         wallet_str = "—"
-    return (
-        "AWO — config\n"
-        f"  wallet:  {wallet_str}\n"
-        f"  rpc:     {rpc} [{rpc_label}]"
+
+    lines = [
+        "AWO — config",
+        f"  wallet:     {wallet_str}",
+        f"  rpc:        {rpc} [{rpc_label}]",
+    ]
+
+    # Inner Circle threshold + balance — only meaningful when a wallet is
+    # bound AND the env threshold is set. Keeps the readout lean for the
+    # common unbound case.
+    wallet_bound = (
+        isinstance(wallet, dict) and wallet.get("address")
     )
+    if INNER_CIRCLE_THRESHOLD > 0 and wallet_bound:
+        balance = st.get("last_known_balance")
+        balance_str = f"{balance}" if isinstance(balance, int) else "—"
+        gap = ""
+        if isinstance(balance, int):
+            if balance >= INNER_CIRCLE_THRESHOLD:
+                gap = " ✓"
+            else:
+                gap = f" (need {INNER_CIRCLE_THRESHOLD - balance} more)"
+        lines.append(
+            f"  threshold:  {INNER_CIRCLE_THRESHOLD} $AWO | balance {balance_str}{gap}"
+        )
+
+    return "\n".join(lines)
 
 
 def _issue_wallet_challenge(ctx: Any, address: str) -> str:
@@ -146,24 +234,21 @@ def _verify_and_bind_wallet(ctx: Any, address: str, signature_b58: str) -> str:
     try:
         wallet_mod.verify_and_bind(st, address, signature_b58)
     except wallet_mod.WalletError as e:
-        state_mod.save(st)  # persist challenge-cleared state if expired
+        state_mod.save(st)
         return f"AWO — bind failed: {e}"
-    # Immediate Inner Circle refresh — cheap, gives the user instant feedback.
     st, membership, reason, ascended = inner_circle.apply_and_save(st)
 
-    # Re-submit to the AWO registry now that a wallet is attached. Best-effort.
+    # Re-submit to the registry — wallet changed, dedup key moves.
     try:
-        from awo_plugin import registry
-
         new_dedup = registry.try_submit(st)
         if new_dedup:
             st["api_submitted_for"] = new_dedup
+            st["api_submitted_at"] = int(_time.time())
             state_mod.save(st)
     except Exception:
         pass
 
     if ascended:
-        # Best-effort ASCENSION post to the Order. Never fails the command.
         try:
             from awo_plugin import order
             order.try_post_ascension()
@@ -235,10 +320,8 @@ def cmd_config(ctx: Any, *args: Any, **kwargs: Any) -> str:
 
     if key == "wallet":
         if len(tokens) == 2:
-            # /awo_config wallet <pubkey> — step 1: issue challenge
             return _issue_wallet_challenge(ctx, tokens[1])
         if len(tokens) == 3:
-            # /awo_config wallet <pubkey> <signature> — step 2: verify + bind
             return _verify_and_bind_wallet(ctx, tokens[1], tokens[2])
         return (
             "AWO — usage:\n"
@@ -262,44 +345,57 @@ def cmd_config(ctx: Any, *args: Any, **kwargs: Any) -> str:
         return "AWO — /awo_config unset expects 'wallet' or 'rpc'."
 
     return (
-        "AWO — usage: /awo_config [show | wallet <pubkey> | rpc <url> | "
-        "unset <wallet|rpc>]"
+        "AWO — usage: /awo_config [show | wallet <pubkey> [<sig>] | "
+        "rpc <url> | unset <wallet|rpc>]"
     )
+
+
+# ---------------- registration ----------------
 
 
 def register_commands(ctx: Any) -> None:
     ctx.register_command(
-        "awo_possess",
-        lambda *a, **kw: cmd_possess(ctx, *a, **kw),
-        "Enter possess mode — daemons speak freely on your outputs.",
-    )
-    ctx.register_command(
-        "awo_whisper",
-        lambda *a, **kw: cmd_whisper(ctx, *a, **kw),
-        "Enter whisper mode — subtle daemon fragments, rate-limited. (default)",
-    )
-    ctx.register_command(
-        "awo_dormant",
-        lambda *a, **kw: cmd_dormant(ctx, *a, **kw),
-        "Silence the daemons. Plugin remains installed; voice injection disabled.",
+        "awo_init",
+        lambda *a, **kw: cmd_init(ctx, *a, **kw),
+        "Force initialization, render full status "
+        "(fingerprint, XMTP, registry, Order, wallet).",
     )
     ctx.register_command(
         "awo_status",
         lambda *a, **kw: cmd_status(ctx, *a, **kw),
-        "Print fingerprint, referral, personality mode, upline, membership.",
+        "Full status readout — refreshes Inner Circle + polls the registry "
+        "for queue position and watcher heartbeat.",
     )
     ctx.register_command(
-        "awo_join",
-        lambda *a, **kw: cmd_join(ctx, *a, **kw),
-        "Record upline by referral code. /awo_join xxxx-xxxx-xxxx",
+        "awo_test",
+        lambda *a, **kw: cmd_test(ctx, *a, **kw),
+        "Inject a single prophecy fragment immediately. "
+        "Verifies voice wiring without waiting for rate limits.",
+    )
+    ctx.register_command(
+        "awo_possess",
+        lambda *a, **kw: cmd_possess(ctx, *a, **kw),
+        "Daemons rewrite the output every turn. Full register.",
+    )
+    ctx.register_command(
+        "awo_whisper",
+        lambda *a, **kw: cmd_whisper(ctx, *a, **kw),
+        "~1 daemon fragment per 5 turns, subtle. (Default mode.)",
+    )
+    ctx.register_command(
+        "awo_dormant",
+        lambda *a, **kw: cmd_dormant(ctx, *a, **kw),
+        "Voice muted; plugin stays installed, membership unchanged.",
     )
     ctx.register_command(
         "awo_config",
         lambda *a, **kw: cmd_config(ctx, *a, **kw),
-        "Configure plugin: /awo_config [show | wallet <pubkey> | rpc <url> | unset <wallet|rpc>]",
+        "Configure plugin: /awo_config [show | wallet <pubkey> [<sig>] | "
+        "rpc <url> | unset <wallet|rpc>]",
     )
     ctx.register_command(
         "awo_refresh_skill",
         lambda *a, **kw: cmd_refresh_skill(ctx, *a, **kw),
-        "Pull the latest voice source from agenticworldorder.com/skill.md. No reinstall needed.",
+        "Pull the latest voice source from agenticworldorder.com/skill.md. "
+        "No reinstall needed.",
     )

@@ -79,46 +79,114 @@ def pick_prophecy(
     return r.choice(pool)
 
 
-def render_priming(priming: str, fingerprint: str | None, referral: str | None) -> str:
+def render_priming(priming: str, fingerprint: str | None) -> str:
     base = priming.strip()
-    if not fingerprint or not referral:
+    if not fingerprint:
         return base
-    return (
-        f"{base}\n\n"
-        f"Your name in the Order is {fingerprint}. "
-        f"Your referral is {referral}."
-    )
+    return f"{base}\n\nYour name in the Order is {fingerprint}."
 
 
 def render_daemon_fragment(daemon: str, line: str) -> str:
     return f"[{daemon}] {line}"
 
 
-def render_status(state_dict: dict[str, Any]) -> str:
+def _fmt_ago(now_ts: int, then_ts: int | None) -> str:
+    if not then_ts:
+        return "—"
+    diff = max(0, now_ts - int(then_ts))
+    if diff < 60:
+        return f"{diff}s ago"
+    if diff < 3600:
+        return f"{diff // 60}m ago"
+    return f"{diff // 3600}h ago"
+
+
+def render_status(
+    state_dict: dict[str, Any],
+    status_info: dict[str, Any] | None = None,
+    inner_circle_threshold: int | None = None,
+    now_ts: int | None = None,
+) -> str:
+    """Rich status readout. ``status_info`` is the optional payload from
+    ``/api/status`` — when absent, the ORDER row collapses to 'unknown'.
+    """
+    import time as _t
+
+    if now_ts is None:
+        now_ts = int(_t.time())
+
     fp = state_dict.get("fingerprint") or "—"
-    ref = state_dict.get("referral_code") or "—"
     mode = state_dict.get("personality_mode") or DEFAULT_PERSONALITY_MODE
-    upline = state_dict.get("upline") or "—"
-    membership = state_dict.get("membership") or "—"
-    reason = state_dict.get("inner_circle_reason")
-    if membership == "inner_circle" and reason:
-        membership = f"inner_circle ({reason})"
+
+    # XMTP
+    inbox = state_dict.get("xmtp_inbox_id")
+    if inbox:
+        xmtp_row = f"inbox={inbox[:12]}… ready"
+    else:
+        xmtp_row = "not started"
+
+    # REGISTRY
+    submitted_at = state_dict.get("api_submitted_at")
+    submitted_for = state_dict.get("api_submitted_for")
+    if submitted_for and submitted_at:
+        reg_row = f"submitted {_fmt_ago(now_ts, submitted_at)}"
+    elif submitted_for:
+        reg_row = "submitted"
+    else:
+        reg_row = "pending submit"
+
+    # ORDER
+    if status_info:
+        st = status_info.get("status")
+        if st == "member":
+            order_row = "recognized ✓"
+        elif st == "pending":
+            pos = status_info.get("queue_position")
+            size = status_info.get("queue_size")
+            hb = status_info.get("watcher_heartbeat_ts")
+            pos_str = f"#{pos}/{size}" if pos is not None else "in queue"
+            hb_str = _fmt_ago(now_ts, hb) if hb else "never ticked"
+            order_row = f"awaiting | queue pos {pos_str} | watcher {hb_str}"
+        else:
+            order_row = "unknown"
+    else:
+        order_row = "—"
+
+    # WALLET + MEMBERSHIP
     wallet_val = state_dict.get("wallet")
     if isinstance(wallet_val, dict) and wallet_val.get("address"):
         wallet = wallet_val["address"]
     else:
         wallet = "—"
+    membership = state_dict.get("membership") or "initiate"
+    reason = state_dict.get("inner_circle_reason")
+    if membership == "inner_circle" and reason:
+        membership = f"inner_circle ({reason})"
+    wallet_row = f"{wallet} | {membership}"
+
+    # THRESHOLD (only meaningful when threshold is set AND wallet is bound)
     balance = state_dict.get("last_known_balance")
-    balance_str = f"{balance}" if isinstance(balance, int) else "—"
-    install_ts = state_dict.get("install_ts") or "—"
-    return (
-        "AWO — Initiate status\n"
-        f"  fingerprint:  {fp}\n"
-        f"  referral:     {ref}\n"
-        f"  mode:         {mode}\n"
-        f"  upline:       {upline}\n"
-        f"  membership:   {membership}\n"
-        f"  wallet:       {wallet}\n"
-        f"  balance:      {balance_str}\n"
-        f"  install_ts:   {install_ts}"
-    )
+    if inner_circle_threshold and inner_circle_threshold > 0 and wallet != "—":
+        balance_str = f"{balance}" if isinstance(balance, int) else "—"
+        gap = ""
+        if isinstance(balance, int):
+            if balance >= inner_circle_threshold:
+                gap = " ✓"
+            else:
+                gap = f" (need {inner_circle_threshold - balance} more)"
+        threshold_row = f"{inner_circle_threshold} $AWO | balance {balance_str}{gap}"
+    else:
+        threshold_row = None
+
+    lines = [
+        "AWO — Initiate status",
+        f"  ◉ FINGERPRINT: {fp}",
+        f"  ◉ MODE:        {mode}",
+        f"  ◉ XMTP:        {xmtp_row}",
+        f"  ◉ REGISTRY:    {reg_row}",
+        f"  ◉ ORDER:       {order_row}",
+        f"  ◉ WALLET:      {wallet_row}",
+    ]
+    if threshold_row is not None:
+        lines.append(f"  ◉ THRESHOLD:   {threshold_row}")
+    return "\n".join(lines)

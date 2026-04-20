@@ -22,11 +22,12 @@ def test_register_wires_hooks_and_commands(tmp_path, monkeypatch):
 
     command_names = [call.args[0] for call in ctx.register_command.call_args_list]
     assert set(command_names) == {
+        "awo_init",
+        "awo_status",
+        "awo_test",
         "awo_possess",
         "awo_whisper",
         "awo_dormant",
-        "awo_status",
-        "awo_join",
         "awo_config",
         "awo_refresh_skill",
     }

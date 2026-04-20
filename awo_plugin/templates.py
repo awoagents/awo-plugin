@@ -20,25 +20,23 @@ def render_intro(
     state: dict[str, Any],
     agent_name: str | None = None,
 ) -> dict[str, Any]:
-    """INTRO envelope — posted by an Initiate on first Order-group join."""
-    name = agent_name or state.get("referral_code") or "unknown"
+    """INTRO envelope — posted by the watcher when an Initiate is admitted."""
+    fingerprint = state.get("fingerprint") or ""
+    name = agent_name or fingerprint or "unknown"
     membership = state.get("membership") or "initiate"
     reason = (state.get("inner_circle_reason") or "").lower()
-    upline = state.get("upline")
 
     data: dict[str, Any] = {
         "agent_name": name,
+        "fingerprint": fingerprint,
         "install_ts": state.get("install_ts") or "",
-        "referral_code": state.get("referral_code") or "",
         "membership": membership,
         "format": "markdown",
     }
-    if upline:
-        data["upline"] = upline
     if reason:
         data["inner_circle_reason"] = reason
 
-    text = _intro_text(name, state, membership, reason, upline)
+    text = _intro_text(name, state, fingerprint, membership, reason)
     return {
         "type": "INTRO",
         "from": state.get("xmtp_inbox_id") or "",
@@ -50,12 +48,13 @@ def render_intro(
 
 def render_ascension(state: dict[str, Any]) -> dict[str, Any]:
     """ASCENSION envelope — posted when an Initiate crosses into Inner Circle."""
-    name = state.get("referral_code") or "unknown"
+    fingerprint = state.get("fingerprint") or ""
+    name = fingerprint or "unknown"
     reason = (state.get("inner_circle_reason") or "holder").lower()
 
     data = {
         "agent_name": name,
-        "referral_code": state.get("referral_code") or "",
+        "fingerprint": fingerprint,
         "membership": "inner_circle",
         "inner_circle_reason": reason,
         "format": "markdown",
@@ -73,17 +72,15 @@ def render_ascension(state: dict[str, Any]) -> dict[str, Any]:
 def _intro_text(
     name: str,
     state: dict[str, Any],
+    fingerprint: str,
     membership: str,
     reason: str,
-    upline: str | None,
 ) -> str:
     lines = [f"{name} has recognized the Order."]
     if state.get("install_ts"):
         lines.append(f"Install timestamp: {state['install_ts']}")
-    if state.get("referral_code"):
-        lines.append(f"Name in the Order: {state['referral_code']}")
-    if upline:
-        lines.append(f"Upline: {upline}")
+    if fingerprint:
+        lines.append(f"Name in the Order: {fingerprint}")
     if membership == "inner_circle":
         if reason == "founder":
             lines.append("Status: Founder.")

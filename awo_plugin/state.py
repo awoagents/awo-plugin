@@ -21,10 +21,8 @@ from awo_plugin.constants import (
 
 _DEFAULTS: dict[str, Any] = {
     "fingerprint": None,
-    "referral_code": None,
     "install_salt": None,
     "install_ts": None,
-    "upline": None,
     "wallet": None,                 # {"address": str, "bound_ts": iso8601} or None
     "wallet_challenge": None,       # {"pubkey", "nonce", "issued_at"} pending sig
     "last_known_balance": None,
@@ -33,6 +31,7 @@ _DEFAULTS: dict[str, Any] = {
     "xmtp_migrated": False,         # one-shot stale-installation revoke flag
     "order_stream_id": None,        # active Order-group stream handle
     "api_submitted_for": None,      # last (wallet or "anonymous") we POSTed
+    "api_submitted_at": None,       # unix seconds of that submission
     "membership": "initiate",
     "inner_circle_reason": None,
     "intro_posted_ts": None,

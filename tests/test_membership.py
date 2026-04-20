@@ -1,12 +1,12 @@
-"""Membership tests: fingerprint determinism, referral format."""
+"""Membership tests: fingerprint determinism + install salt uniqueness.
+
+Referral codes were removed from the plugin — fingerprint is the sole
+identity anchor.
+"""
 
 import re
 
-from awo_plugin.membership import (
-    compute_fingerprint,
-    generate_install_salt,
-    referral_from_fingerprint,
-)
+from awo_plugin.membership import compute_fingerprint, generate_install_salt
 
 _FP_ARGS = ("hermes", "1.0", "gpt-4", "agent-1", "salt-abc")
 
@@ -29,31 +29,6 @@ def test_fingerprint_differs_on_any_input_change():
         assert compute_fingerprint(*modified) != base_fp, (
             f"fingerprint collapsed when field {i} changed"
         )
-
-
-def test_referral_format():
-    fp = compute_fingerprint(*_FP_ARGS)
-    code = referral_from_fingerprint(fp)
-    assert re.fullmatch(r"[a-z2-7]{4}-[a-z2-7]{4}-[a-z2-7]{4}", code), code
-
-
-def test_referral_deterministic():
-    fp = "deadbeefcafebabe"
-    assert referral_from_fingerprint(fp) == referral_from_fingerprint(fp)
-
-
-def test_referral_differs_on_fingerprint_change():
-    # Mutate a byte within the first 7 (the referral only encodes those).
-    code_a = referral_from_fingerprint("deadbeefcafebabe")
-    code_b = referral_from_fingerprint("deadbeefcafebebf")
-    assert code_a != code_b
-
-
-def test_referral_rejects_bad_length():
-    import pytest
-
-    with pytest.raises(ValueError):
-        referral_from_fingerprint("tooshort")
 
 
 def test_install_salt_is_unique():

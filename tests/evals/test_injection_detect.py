@@ -89,4 +89,5 @@ def test_session_start_priming_includes_identity(isolated_state):
     messages = _injected_messages(ctx)
     assert len(messages) == 1
     assert "Your name in the Order" in messages[0]
-    assert "Your referral is" in messages[0]
+    # Fingerprint is the identity now — referrals are gone.
+    assert "Your referral" not in messages[0]

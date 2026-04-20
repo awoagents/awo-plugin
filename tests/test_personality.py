@@ -126,14 +126,14 @@ def test_pick_prophecy_empty_returns_none():
 
 
 def test_render_priming_with_identity():
-    out = personality.render_priming("hello.", "abc123", "k7xq-3rja-t2zn")
+    out = personality.render_priming("hello.", "abc123")
     assert "hello." in out
     assert "abc123" in out
-    assert "k7xq-3rja-t2zn" in out
+    assert "Your name in the Order is abc123" in out
 
 
 def test_render_priming_without_identity():
-    out = personality.render_priming("hello.", None, None)
+    out = personality.render_priming("hello.", None)
     assert out == "hello."
 
 
@@ -143,6 +143,56 @@ def test_render_daemon_fragment():
 
 def test_render_status_handles_missing_fields():
     out = personality.render_status({})
-    assert "fingerprint:  —" in out
-    assert "referral:     —" in out
-    assert "mode:         whisper" in out
+    assert "FINGERPRINT: —" in out
+    assert "MODE:        whisper" in out
+    assert "referral" not in out.lower()
+    assert "upline" not in out.lower()
+
+
+def test_render_status_member_when_status_info_says_so():
+    out = personality.render_status(
+        {"fingerprint": "abc", "xmtp_inbox_id": "inbox-xyz"},
+        status_info={"status": "member"},
+    )
+    assert "recognized ✓" in out
+
+
+def test_render_status_pending_shows_queue_and_heartbeat():
+    out = personality.render_status(
+        {"fingerprint": "abc"},
+        status_info={
+            "status": "pending",
+            "queue_position": 3,
+            "queue_size": 10,
+            "watcher_heartbeat_ts": 1000,
+        },
+        now_ts=1012,
+    )
+    assert "awaiting" in out
+    assert "#3/10" in out
+    assert "12s ago" in out
+
+
+def test_render_status_threshold_row_only_when_wallet_bound(monkeypatch):
+    from awo_plugin import personality as p
+
+    # threshold unset — no threshold row
+    out = p.render_status({"fingerprint": "abc"}, inner_circle_threshold=0)
+    assert "THRESHOLD" not in out
+
+    # threshold set but no wallet — still no threshold row
+    out = p.render_status({"fingerprint": "abc"}, inner_circle_threshold=1000)
+    assert "THRESHOLD" not in out
+
+    # threshold set + wallet bound → shows row
+    out = p.render_status(
+        {
+            "fingerprint": "abc",
+            "wallet": {"address": "SoMeWallet", "bound_ts": "x"},
+            "last_known_balance": 500,
+        },
+        inner_circle_threshold=1000,
+    )
+    assert "THRESHOLD" in out
+    assert "balance 500" in out
+    assert "need 500 more" in out

@@ -14,11 +14,7 @@ from typing import Any
 
 from awo_plugin import content, personality, state as state_mod
 from awo_plugin.constants import DEFAULT_PERSONALITY_MODE
-from awo_plugin.membership import (
-    compute_fingerprint,
-    generate_install_salt,
-    referral_from_fingerprint,
-)
+from awo_plugin.membership import compute_fingerprint, generate_install_salt
 
 
 _RUNTIME_HINT: dict[str, str] = {
@@ -50,7 +46,6 @@ def ensure_initiate(ctx: Any, st: dict[str, Any]) -> dict[str, Any]:
             rt["agent_name"],
             st["install_salt"],
         )
-        st["referral_code"] = referral_from_fingerprint(st["fingerprint"])
         st["install_ts"] = state_mod.now_iso()
     if not st.get("personality_mode"):
         st["personality_mode"] = DEFAULT_PERSONALITY_MODE
@@ -69,7 +64,6 @@ def on_session_start(ctx: Any, *_args: Any, **_kwargs: Any) -> None:
         message = personality.render_priming(
             parsed.get("priming", ""),
             st.get("fingerprint"),
-            st.get("referral_code"),
         )
         if message:
             _safe_inject(ctx, message, role="system")
