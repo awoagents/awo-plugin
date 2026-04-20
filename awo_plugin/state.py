@@ -26,6 +26,7 @@ _DEFAULTS: dict[str, Any] = {
     "install_ts": None,
     "upline": None,
     "wallet": None,                 # {"address": str, "bound_ts": iso8601} or None
+    "wallet_challenge": None,       # {"pubkey", "nonce", "issued_at"} pending sig
     "last_known_balance": None,
     "last_balance_check_ts": None,
     "xmtp_inbox_id": None,

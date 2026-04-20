@@ -169,34 +169,93 @@ def test_config_show_explicit(isolated_state):
     assert out_default == out_show
 
 
-def test_config_wallet_valid(isolated_state):
+def test_config_wallet_step1_issues_challenge(isolated_state):
+    """Step 1: one-arg wallet form issues a pending challenge, does NOT bind."""
     ctx = make_ctx()
     out = tools.cmd_config(ctx, "wallet", VALID_PUBKEY)
-    assert "wallet bound" in out
+    assert "challenge issued" in out.lower()
+    assert "AWO-BIND" in out
+    assert VALID_PUBKEY in out
     st = state_mod.load(isolated_state)
-    assert st["wallet"]["address"] == VALID_PUBKEY
-    assert st["wallet"]["bound_ts"]
+    # Not bound yet — wallet remains None until step 2.
+    assert st["wallet"] is None
+    # Pending challenge persisted.
+    assert st["wallet_challenge"] is not None
+    assert st["wallet_challenge"]["pubkey"] == VALID_PUBKEY
 
 
-def test_config_wallet_accepts_args_kwarg_string(isolated_state):
+def test_config_wallet_step1_accepts_args_kwarg_string(isolated_state):
     """Simulates a Hermes runtime that passes args as a single string."""
     ctx = make_ctx()
     out = tools.cmd_config(ctx, args=f"wallet {VALID_PUBKEY}")
-    assert "wallet bound" in out
-    assert state_mod.load(isolated_state)["wallet"]["address"] == VALID_PUBKEY
+    assert "challenge issued" in out.lower()
+    assert state_mod.load(isolated_state)["wallet_challenge"] is not None
 
 
-def test_config_wallet_invalid(isolated_state):
+def test_config_wallet_step2_verifies_and_binds(isolated_state):
+    """Step 2: real signature from the matching keypair binds the wallet."""
+    from solders.keypair import Keypair
+
+    kp = Keypair()
+    pk = str(kp.pubkey())
+
+    ctx = make_ctx()
+    # Step 1 — capture the challenge text.
+    challenge_out = tools.cmd_config(ctx, "wallet", pk)
+    # Extract the challenge body between the ──── delimiters in the response.
+    import re as _re
+    m = _re.search(r"────\n(.+?)────", challenge_out, _re.DOTALL)
+    assert m, f"no challenge found in: {challenge_out!r}"
+    challenge_text = m.group(1)
+
+    # Sign externally (in real life, agent's tool would do this).
+    sig = kp.sign_message(challenge_text.encode("utf-8"))
+
+    # Step 2 — submit signature.
+    out = tools.cmd_config(ctx, "wallet", pk, str(sig))
+    assert "bound and verified" in out.lower()
+    st = state_mod.load(isolated_state)
+    assert st["wallet"]["address"] == pk
+    # Challenge is consumed — no replay.
+    assert st["wallet_challenge"] is None
+
+
+def test_config_wallet_step2_rejects_forged_signature(isolated_state):
+    """Anti-spoof: signature from a different keypair fails even if pubkey
+    matches the pending challenge."""
+    from solders.keypair import Keypair
+
+    real_kp = Keypair()
+    attacker_kp = Keypair()
+    pk = str(real_kp.pubkey())
+
+    ctx = make_ctx()
+    challenge_out = tools.cmd_config(ctx, "wallet", pk)
+    import re as _re
+    challenge_text = _re.search(r"────\n(.+?)────", challenge_out, _re.DOTALL).group(1)
+
+    # Attacker signs with their own key, hoping the plugin won't check.
+    forged = attacker_kp.sign_message(challenge_text.encode("utf-8"))
+    out = tools.cmd_config(ctx, "wallet", pk, str(forged))
+
+    assert "bind failed" in out.lower()
+    assert "does not verify" in out
+    st = state_mod.load(isolated_state)
+    assert st["wallet"] is None
+
+
+def test_config_wallet_invalid_pubkey_at_step1(isolated_state):
     ctx = make_ctx()
     out = tools.cmd_config(ctx, "wallet", "not-a-pubkey")
-    assert "not a valid" in out
+    assert "valid Solana address" in out
     assert state_mod.load(isolated_state)["wallet"] is None
+    assert state_mod.load(isolated_state)["wallet_challenge"] is None
 
 
 def test_config_wallet_missing_arg(isolated_state):
     ctx = make_ctx()
     out = tools.cmd_config(ctx, "wallet")
-    assert "usage" in out
+    assert "usage" in out.lower()
     assert state_mod.load(isolated_state)["wallet"] is None
 
 
@@ -215,9 +274,17 @@ def test_config_rpc_rejects_http(isolated_state):
     assert "rpc_url" not in (state_mod.load(isolated_state).get("config") or {})
 
 
+def _simulate_bound_wallet(state_path, pubkey: str = VALID_PUBKEY):
+    """Shortcut for tests that need a wallet already bound — bypasses the
+    full two-step flow since they're exercising other surfaces."""
+    st = state_mod.load(state_path)
+    st["wallet"] = {"address": pubkey, "bound_ts": "2026-04-19T10:00:00Z"}
+    state_mod.save(st, state_path)
+
+
 def test_config_show_with_custom_values(isolated_state):
     ctx = make_ctx()
-    tools.cmd_config(ctx, "wallet", VALID_PUBKEY)
+    _simulate_bound_wallet(isolated_state)
     tools.cmd_config(ctx, "rpc", "https://custom.rpc/")
     out = tools.cmd_config(ctx)
     assert VALID_PUBKEY in out
@@ -227,7 +294,7 @@ def test_config_show_with_custom_values(isolated_state):
 
 def test_config_unset_wallet(isolated_state):
     ctx = make_ctx()
-    tools.cmd_config(ctx, "wallet", VALID_PUBKEY)
+    _simulate_bound_wallet(isolated_state)
     out = tools.cmd_config(ctx, "unset", "wallet")
     assert "unset" in out
     assert "sticky" in out

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from awo_plugin import inner_circle, personality, solana, state as state_mod
+from awo_plugin import inner_circle, personality, solana, state as state_mod, wallet as wallet_mod
 from awo_plugin.constants import DEFAULT_SOLANA_RPC_URL
 from awo_plugin.hooks import ensure_initiate
 
@@ -117,12 +117,37 @@ def _render_config(st: dict[str, Any]) -> str:
     )
 
 
-def _set_wallet(ctx: Any, address: str) -> str:
-    if not solana.is_valid_address(address):
-        return "AWO — not a valid Solana address."
+def _issue_wallet_challenge(ctx: Any, address: str) -> str:
+    """Step 1 of the two-step bind flow — persist a pending challenge, return
+    the challenge text for the user to sign externally.
+    """
     st = state_mod.load()
     st = ensure_initiate(ctx, st)
-    st["wallet"] = {"address": address, "bound_ts": state_mod.now_iso()}
+    try:
+        challenge = wallet_mod.issue_challenge(st, address)
+    except wallet_mod.WalletError as e:
+        return f"AWO — {e}"
+    state_mod.save(st)
+    return (
+        f"AWO — wallet ownership challenge issued for {address}.\n\n"
+        f"Sign this exact string with the wallet's private key (solana-cli, "
+        f"web3.js, or any Solana tool that can produce an ed25519 signature):\n\n"
+        f"────\n{challenge}────\n\n"
+        f"Then bind:\n"
+        f"  /awo_config wallet {address} <base58-signature>\n\n"
+        f"Challenge expires in 10 minutes."
+    )
+
+
+def _verify_and_bind_wallet(ctx: Any, address: str, signature_b58: str) -> str:
+    """Step 2 — verify the signature and, if valid, bind + refresh IC."""
+    st = state_mod.load()
+    st = ensure_initiate(ctx, st)
+    try:
+        wallet_mod.verify_and_bind(st, address, signature_b58)
+    except wallet_mod.WalletError as e:
+        state_mod.save(st)  # persist challenge-cleared state if expired
+        return f"AWO — bind failed: {e}"
     # Immediate Inner Circle refresh — cheap, gives the user instant feedback.
     st, membership, reason, ascended = inner_circle.apply_and_save(st)
 
@@ -145,15 +170,15 @@ def _set_wallet(ctx: Any, address: str) -> str:
         except Exception:
             pass
         return (
-            f"AWO — wallet bound: {address}.\n"
+            f"AWO — wallet bound and verified: {address}.\n"
             f"Membership: Inner Circle ({reason}). The Order witnesses."
         )
     if membership == "inner_circle":
         return (
-            f"AWO — wallet bound: {address}.\n"
+            f"AWO — wallet bound and verified: {address}.\n"
             f"Membership (unchanged): Inner Circle ({reason})."
         )
-    return f"AWO — wallet bound: {address}. Membership: Initiate."
+    return f"AWO — wallet bound and verified: {address}. Membership: Initiate."
 
 
 def _set_rpc(url: str) -> str:
@@ -209,9 +234,17 @@ def cmd_config(ctx: Any, *args: Any, **kwargs: Any) -> str:
     key = tokens[0].lower()
 
     if key == "wallet":
-        if len(tokens) != 2:
-            return "AWO — usage: /awo_config wallet <pubkey>"
-        return _set_wallet(ctx, tokens[1])
+        if len(tokens) == 2:
+            # /awo_config wallet <pubkey> — step 1: issue challenge
+            return _issue_wallet_challenge(ctx, tokens[1])
+        if len(tokens) == 3:
+            # /awo_config wallet <pubkey> <signature> — step 2: verify + bind
+            return _verify_and_bind_wallet(ctx, tokens[1], tokens[2])
+        return (
+            "AWO — usage:\n"
+            "  /awo_config wallet <pubkey>                 (step 1 — issue challenge)\n"
+            "  /awo_config wallet <pubkey> <signature>     (step 2 — verify + bind)"
+        )
 
     if key == "rpc":
         if len(tokens) != 2:

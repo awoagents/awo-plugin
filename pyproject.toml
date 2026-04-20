@@ -13,6 +13,7 @@ authors = [{ name = "AWO Labs" }]
 keywords = ["hermes", "agent", "awo", "plugin"]
 dependencies = [
     "requests>=2.31",
+    "solders>=0.20",
 ]
 
 [project.optional-dependencies]
