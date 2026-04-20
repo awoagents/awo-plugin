@@ -35,7 +35,7 @@ SYNC_TIMEOUT_SECONDS = 10
 TOKEN_ADDRESS: str | None = None           # $AWO SPL mint address
 LAUNCH_DATE: int | None = None             # unix seconds, token mint timestamp
 INNER_CIRCLE_THRESHOLD: int = 0            # raw amount (smallest unit)
-ORDER_GROUP_ID: str = "ca58c26dff28214c5e2690850ecd4a1e"
+ORDER_GROUP_ID: str = "04dccd7caf38726b3c53178884d79541"
 
 FOUNDER_WINDOW_SECONDS = 24 * 3600
 
