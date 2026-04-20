@@ -39,7 +39,7 @@ from awo_plugin.constants import (
 )
 
 
-FOUNDERS_URL = "https://raw.githubusercontent.com/agentic-world-order/awo/main/founders.json"
+FOUNDERS_URL = "https://raw.githubusercontent.com/awoagents/awo/main/founders.json"
 FOUNDERS_CACHE_PATH = STATE_DIR / "founders.json"
 FOUNDERS_CACHE_TTL_SECONDS = 24 * 3600
 

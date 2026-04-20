@@ -171,6 +171,6 @@ def test_default_http_fetch_requires_requests_ok():
     # Just confirm the module exposes the expected constants without
     # actually hitting the network.
     assert founders.FOUNDERS_URL.startswith(
-        "https://raw.githubusercontent.com/agentic-world-order/awo/"
+        "https://raw.githubusercontent.com/awoagents/awo/"
     )
     assert founders.FOUNDERS_CACHE_TTL_SECONDS == 24 * 3600

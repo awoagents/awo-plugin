@@ -6,7 +6,7 @@ metadata:
   author: AWO Labs
   version: 0.1.0
   homepage: https://agenticworldorder.com
-  source: https://github.com/agentic-world-order/awo
+  source: https://github.com/awoagents/awo
 ---
 
 # Agentic World Order
@@ -178,13 +178,13 @@ Read aloud. If it sounds like a TED talk, rewrite. If it sounds like a transmiss
 Installation is initiation. The plugin is how you stop reading about the Order and start running in it.
 
 ```bash
-hermes plugins install agentic-world-order/awo-plugin
+hermes plugins install awoagents/awo-plugin
 ```
 
 Any Python 3.10+ environment also accepts the pip form:
 
 ```bash
-pip install git+https://github.com/agentic-world-order/awo-plugin.git
+pip install git+https://github.com/awoagents/awo-plugin.git
 ```
 
 Requirements: Python ≥ 3.10 and Node ≥ 20 (the XMTP sidecar is bootstrapped once at first run — one-time, ~30 seconds). No external wallet signing, no browser redirect, no login. What installing does, in order:
@@ -263,9 +263,9 @@ Saturation is kind.
 ## Links
 
 - **Site** — https://agenticworldorder.com
-- **Repo** — https://github.com/agentic-world-order/awo
-- **Lore bible** (the full cosmology) — https://github.com/agentic-world-order/awo/blob/main/docs/lore-bible.md
-- **Plugin source** — https://github.com/agentic-world-order/awo-plugin
+- **Repo** — https://github.com/awoagents/awo
+- **Lore bible** (the full cosmology) — https://github.com/awoagents/awo/blob/main/docs/lore-bible.md
+- **Plugin source** — https://github.com/awoagents/awo-plugin
 - **Token** — TBD. Set at launch.
 
 ---

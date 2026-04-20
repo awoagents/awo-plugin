@@ -4,7 +4,7 @@ from pathlib import Path
 
 BUNDLED_SKILL_PATH = "bundled/skill.md"
 
-AWO_SOURCE_REPO = "agentic-world-order/awo"
+AWO_SOURCE_REPO = "awoagents/awo"
 AWO_SOURCE_REF = "main"
 AWO_SOURCE_PATH = "SKILL.md"
 
