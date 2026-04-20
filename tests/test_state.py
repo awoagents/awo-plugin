@@ -52,6 +52,15 @@ def test_defaults_no_referral_fields():
     assert "upline" not in d
 
 
+def test_defaults_includes_order_group_id():
+    """Stored ORDER_GROUP_ID is how the plugin detects drift between
+    releases. Must be in defaults so load() on an older state.json
+    (pre-drift-detection) surfaces None instead of KeyError."""
+    d = state.defaults()
+    assert "order_group_id" in d
+    assert d["order_group_id"] is None
+
+
 def test_load_merges_partial_onto_defaults(tmp_path: Path):
     """Older state files missing new keys load fine — new keys take defaults."""
     p = tmp_path / "state.json"

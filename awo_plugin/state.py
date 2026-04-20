@@ -29,6 +29,8 @@ _DEFAULTS: dict[str, Any] = {
     "last_balance_check_ts": None,
     "xmtp_inbox_id": None,
     "xmtp_migrated": False,         # one-shot stale-installation revoke flag
+    "order_group_id": None,         # last-seen ORDER_GROUP_ID — used to detect
+                                    # constant drift between plugin releases
     "order_stream_id": None,        # active Order-group stream handle
     "api_submitted_for": None,      # last (wallet or "anonymous") we POSTed
     "api_submitted_at": None,       # unix seconds of that submission

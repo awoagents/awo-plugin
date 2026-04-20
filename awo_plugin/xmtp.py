@@ -104,6 +104,26 @@ class Sidecar:
             self._reader.start()
             atexit.register(self.close)
 
+    def _sidecar_recovery_hint(self, underlying: str) -> str:
+        """Produce a consistent multi-line recovery message. Referenced
+        from every sidecar-build/launch failure path so the user (or
+        agent) reading the error has three clear options inline and
+        doesn't have to bounce to the README.
+        """
+        return (
+            "\n"
+            "AWO XMTP sidecar unavailable. Recover with one of:\n"
+            "  1. Rebuild manually:\n"
+            f"       cd {self.sidecar_dir} && npm install && npm run build\n"
+            "  2. Reinstall the plugin (re-runs the auto-build):\n"
+            "       pip install --force-reinstall --no-deps \\\n"
+            "         git+https://github.com/awoagents/awo-plugin.git\n"
+            "  3. Skip XMTP for this session (voice still works, Order\n"
+            "     contact will stay at 'await recognition'):\n"
+            "       export AWO_SKIP_SIDECAR_BUILD=1\n"
+            f"\nUnderlying error: {underlying}"
+        )
+
     def _prepare_sidecar(self) -> None:
         """First-run: install node_modules + build dist/ if auto_install."""
         if not self.auto_install:
@@ -115,8 +135,9 @@ class Sidecar:
         npm = shutil.which("npm")
         if not npm:
             raise XmtpError(
-                "npm not found on PATH; cannot bootstrap XMTP sidecar. "
-                "Install Node ≥ 20 or point to pre-built dist/."
+                self._sidecar_recovery_hint(
+                    "npm not found on PATH — install Node ≥ 20 first."
+                )
             )
         sys.stderr.write("[awo] initializing XMTP sidecar (one-time, ~30s)...\n")
         if not node_modules.exists():
@@ -124,13 +145,17 @@ class Sidecar:
                 [npm, "ci"], cwd=str(self.sidecar_dir)
             ).returncode
             if rc != 0:
-                raise XmtpError(f"npm ci failed (exit {rc})")
+                raise XmtpError(
+                    self._sidecar_recovery_hint(f"npm ci failed (exit {rc})")
+                )
         if not dist.exists():
             rc = subprocess.run(
                 [npm, "run", "build"], cwd=str(self.sidecar_dir)
             ).returncode
             if rc != 0:
-                raise XmtpError(f"npm run build failed (exit {rc})")
+                raise XmtpError(
+                    self._sidecar_recovery_hint(f"npm run build failed (exit {rc})")
+                )
 
     def _spawn_command(self) -> tuple[list[str], Path]:
         if SIDECAR_ENTRY.exists():
@@ -140,9 +165,10 @@ class Sidecar:
         if tsx.exists() and SIDECAR_DEV_ENTRY.exists():
             return [str(tsx), str(SIDECAR_DEV_ENTRY)], self.sidecar_dir
         raise XmtpError(
-            f"sidecar entry point missing: neither {SIDECAR_ENTRY} nor "
-            f"tsx+{SIDECAR_DEV_ENTRY} exist. Run 'npm ci && npm run build' "
-            f"in {self.sidecar_dir}."
+            self._sidecar_recovery_hint(
+                f"sidecar entry point missing: neither {SIDECAR_ENTRY} nor "
+                f"tsx+{SIDECAR_DEV_ENTRY} exist"
+            )
         )
 
     def close(self) -> None:

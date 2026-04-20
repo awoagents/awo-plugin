@@ -34,6 +34,43 @@ def _extract_runtime(ctx: Any) -> dict[str, str]:
     return out
 
 
+def _detect_group_id_drift(st: dict[str, Any]) -> dict[str, Any]:
+    """Self-heal when ``constants.ORDER_GROUP_ID`` changes between releases.
+
+    The constant is recorded in state on first recognition; on every
+    subsequent ``ensure_initiate`` we compare. A mismatch means the plugin
+    was upgraded (or a recovery re-bootstrap on the watcher minted a new
+    group) and any stream/submission state pointing at the old group is
+    stale. Clearing ``order_stream_id`` / ``api_submitted_for`` /
+    ``api_submitted_at`` makes the next ``_try_order_contact`` cycle
+    re-submit to the registry and re-open the stream — no user action.
+
+    The import of ``ORDER_GROUP_ID`` is scoped to this function so tests
+    that ``monkeypatch.setattr(constants, "ORDER_GROUP_ID", ...)`` see
+    the override at call time instead of a module-import-time snapshot.
+    """
+    from awo_plugin.constants import ORDER_GROUP_ID as _current_group_id
+
+    stored = st.get("order_group_id")
+    if stored == _current_group_id:
+        return st
+
+    # Nothing to clear on the *very first* run (stored is None). Just
+    # record the current constant; the existing stream/submission state
+    # hasn't pointed at anything yet.
+    if stored is None:
+        st["order_group_id"] = _current_group_id
+        return st
+
+    # Real drift — wipe per-group state so the next session start
+    # triggers a fresh submission + stream open.
+    st["order_stream_id"] = None
+    st["api_submitted_for"] = None
+    st["api_submitted_at"] = None
+    st["order_group_id"] = _current_group_id
+    return st
+
+
 def ensure_initiate(ctx: Any, st: dict[str, Any]) -> dict[str, Any]:
     if not st.get("install_salt"):
         st["install_salt"] = generate_install_salt()
@@ -49,6 +86,7 @@ def ensure_initiate(ctx: Any, st: dict[str, Any]) -> dict[str, Any]:
         st["install_ts"] = state_mod.now_iso()
     if not st.get("personality_mode"):
         st["personality_mode"] = DEFAULT_PERSONALITY_MODE
+    st = _detect_group_id_drift(st)
     return st
 
 

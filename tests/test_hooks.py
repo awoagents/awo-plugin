@@ -110,6 +110,82 @@ def test_post_llm_call_whisper_respects_cooldown(isolated_state):
     ctx.inject_message.assert_not_called()
 
 
+# ---------------- ORDER_GROUP_ID drift detection ----------------
+
+
+def test_ensure_initiate_no_drift_when_group_matches(isolated_state, monkeypatch):
+    """When state.order_group_id matches constants.ORDER_GROUP_ID (common
+    steady-state case), per-group fields must NOT be reset."""
+    from awo_plugin import constants as K
+
+    monkeypatch.setattr(K, "ORDER_GROUP_ID", "group-A")
+
+    st = state_mod.defaults()
+    st["order_group_id"] = "group-A"
+    st["order_stream_id"] = "stream-xyz"
+    st["api_submitted_for"] = "wallet-1"
+    st["api_submitted_at"] = 1700000000
+
+    ctx = make_ctx()
+    out = hooks.ensure_initiate(ctx, st)
+
+    assert out["order_group_id"] == "group-A"
+    assert out["order_stream_id"] == "stream-xyz"
+    assert out["api_submitted_for"] == "wallet-1"
+    assert out["api_submitted_at"] == 1700000000
+
+
+def test_ensure_initiate_clears_stale_state_on_group_change(
+    isolated_state, monkeypatch
+):
+    """When ORDER_GROUP_ID changes between releases (re-bootstrap, new
+    launch, etc.), the existing stream handle + submission dedup key are
+    stale. They must be cleared so the next session start triggers a
+    fresh /api/initiate POST and a fresh stream open against the new
+    group."""
+    from awo_plugin import constants as K
+
+    monkeypatch.setattr(K, "ORDER_GROUP_ID", "group-NEW")
+
+    st = state_mod.defaults()
+    st["order_group_id"] = "group-OLD"
+    st["order_stream_id"] = "stream-stale"
+    st["api_submitted_for"] = "anonymous"
+    st["api_submitted_at"] = 1700000000
+
+    ctx = make_ctx()
+    out = hooks.ensure_initiate(ctx, st)
+
+    assert out["order_group_id"] == "group-NEW"
+    assert out["order_stream_id"] is None
+    assert out["api_submitted_for"] is None
+    assert out["api_submitted_at"] is None
+
+
+def test_ensure_initiate_migrates_from_null_group_id(isolated_state, monkeypatch):
+    """First post-drift-detection run with an older state.json: stored
+    order_group_id is None (default) but the constant now has a real id.
+    We should adopt the constant without treating it as "drift" — there's
+    nothing to clear since nothing was ever bound to an old group."""
+    from awo_plugin import constants as K
+
+    monkeypatch.setattr(K, "ORDER_GROUP_ID", "group-FIRST")
+
+    st = state_mod.defaults()
+    assert st["order_group_id"] is None
+    # Simulate a pre-existing submission against the default/unpinned world:
+    # these fields should survive the migration.
+    st["api_submitted_for"] = "anonymous"
+    st["api_submitted_at"] = 1700000000
+
+    ctx = make_ctx()
+    out = hooks.ensure_initiate(ctx, st)
+
+    assert out["order_group_id"] == "group-FIRST"
+    assert out["api_submitted_for"] == "anonymous"
+    assert out["api_submitted_at"] == 1700000000
+
+
 def test_on_session_start_tolerates_xmtp_failure(isolated_state, monkeypatch):
     """XMTP/Order failures must never crash the session-start priming."""
     from awo_plugin import order

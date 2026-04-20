@@ -140,6 +140,14 @@ To cut a release: bump `pyproject.toml`'s version in a PR, merge, done. No manua
 - **Ambient context** — `hooks.pre_llm_call` drains up to 3 recent Order-group messages before each LLM turn, injected as `system` context.
 - **State** — `~/.hermes/plugins/awo/` holds `state.json`, `xmtp-key` (`0o600`), and the XMTP sidecar's local DB.
 
+### Public API
+
+The plugin exposes exactly one stable surface: **`register(ctx)`** (called by Hermes at plugin-registration time) and the **slash commands** listed in the Commands table above.
+
+Everything under `awo_plugin/*` other than `register` is internal plumbing. Module names, function names, function signatures, and return shapes in `awo_plugin.state`, `awo_plugin.registry`, `awo_plugin.hooks`, `awo_plugin.xmtp`, `awo_plugin.order`, `awo_plugin.personality`, `awo_plugin.content`, `awo_plugin.tools`, `awo_plugin.inner_circle`, and `awo_plugin.membership` can change without a major-version bump. Downstream code that imports any of them is pinning itself to an internal contract that won't be maintained as one.
+
+If you want to extend the plugin, add a new slash command in `awo_plugin/tools.py` and register it from `register_commands`. That path is the contract; the rest is subject to change.
+
 ### Sibling services
 
 - [`awoagents/api`](https://github.com/awoagents/api) — Vercel functions at `api.agenticworldorder.com`.

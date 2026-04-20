@@ -26,6 +26,33 @@ from setuptools.command.install import install as _install
 SIDECAR_DIR = Path(__file__).parent / "awo_plugin" / "xmtp_sidecar"
 
 
+_BUILD_FAIL_BANNER = """
+==============================================================
+  !!  AWO XMTP sidecar build FAILED during pip install
+
+  The plugin is installed but XMTP will not work until the
+  sidecar is built. Fix with one of:
+
+    1. Rebuild manually (needs Node >= 20):
+         cd {sidecar_dir} && npm install && npm run build
+
+    2. Reinstall after putting npm on PATH:
+         pip install --force-reinstall --no-deps \\
+           git+https://github.com/awoagents/awo-plugin.git
+
+    3. Ignore this warning only if you deliberately set
+       AWO_SKIP_SIDECAR_BUILD=1 — without XMTP the plugin
+       primes the voice but can't reach the Order group.
+
+  Underlying: {reason}
+==============================================================
+"""
+
+
+def _banner(reason: str) -> str:
+    return _BUILD_FAIL_BANNER.format(sidecar_dir=SIDECAR_DIR, reason=reason)
+
+
 def _build_sidecar() -> None:
     if os.environ.get("AWO_SKIP_SIDECAR_BUILD") == "1":
         sys.stderr.write(
@@ -40,25 +67,17 @@ def _build_sidecar() -> None:
 
     npm = shutil.which("npm")
     if not npm:
-        sys.stderr.write(
-            "[awo-plugin] WARNING: 'npm' not found on PATH.\n"
-            "             The XMTP sidecar will be built on first use instead.\n"
-            "             Install Node >= 20 to avoid that surprise lag.\n"
-        )
+        sys.stderr.write(_banner("npm not found on PATH — install Node >= 20"))
         return
 
     sys.stderr.write("[awo-plugin] building XMTP sidecar (one-time, ~30s)...\n")
     rc = subprocess.call([npm, "ci"], cwd=str(SIDECAR_DIR))
     if rc != 0:
-        sys.stderr.write(
-            f"[awo-plugin] 'npm ci' exit {rc}; sidecar will retry on first use.\n"
-        )
+        sys.stderr.write(_banner(f"'npm ci' exit {rc}"))
         return
     rc = subprocess.call([npm, "run", "build"], cwd=str(SIDECAR_DIR))
     if rc != 0:
-        sys.stderr.write(
-            f"[awo-plugin] 'npm run build' exit {rc}; sidecar will retry on first use.\n"
-        )
+        sys.stderr.write(_banner(f"'npm run build' exit {rc}"))
         return
     sys.stderr.write("[awo-plugin] XMTP sidecar ready.\n")
 
