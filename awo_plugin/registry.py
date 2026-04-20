@@ -67,7 +67,12 @@ def should_submit(state: dict[str, Any]) -> bool:
 
 
 def build_payload(state: dict[str, Any]) -> dict[str, Any] | None:
-    """Construct the POST body from state. Returns None if not ready."""
+    """Construct the POST body from state. Returns None if not ready.
+
+    Includes ``fingerprint`` so the watcher can render it as the Initiate's
+    "name in the Order" in the INTRO envelope — fingerprint is the sole
+    identity anchor now that referrals are gone.
+    """
     inbox_id = state.get("xmtp_inbox_id")
     install_ts = state.get("install_ts")
     if not (inbox_id and install_ts):
@@ -84,6 +89,7 @@ def build_payload(state: dict[str, Any]) -> dict[str, Any] | None:
         "wallet_address": wallet_address,
         "agent_name": state.get("agent_name") or None,
         "install_ts": install_ts,
+        "fingerprint": state.get("fingerprint") or None,
     }
 
 

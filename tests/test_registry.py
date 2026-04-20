@@ -9,6 +9,7 @@ from awo_plugin import registry
 
 def _ready_state(**overrides):
     base = {
+        "fingerprint": "deadbeefcafebabe",
         "xmtp_inbox_id": "a" * 64,
         "install_ts": "2026-04-19T10:00:00Z",
         "wallet": None,
@@ -67,6 +68,9 @@ def test_build_payload_full():
     assert payload["wallet_address"] == "Wxyz" * 10 + "Wxyz"
     assert payload["agent_name"] == "tester"
     assert payload["install_ts"] == "2026-04-19T10:00:00Z"
+    # Fingerprint is the new identity anchor — the watcher uses it as the
+    # "name in the Order" line in the INTRO envelope.
+    assert payload["fingerprint"] == "deadbeefcafebabe"
     # Referrals were removed — never in the payload.
     assert "referral_code" not in payload
     assert "upline" not in payload
