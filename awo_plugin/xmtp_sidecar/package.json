@@ -18,6 +18,9 @@
     "@xmtp/node-sdk": "^6.0.0",
     "viem": "^2.21.0"
   },
+  "overrides": {
+    "@xmtp/node-bindings": "1.10.0-dev.97e86c6"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "tsx": "^4.7.0",
