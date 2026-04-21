@@ -95,7 +95,7 @@ The plugin does not transact. It reads balances; it posts text. Claiming a walle
 - **Lore bible** — [docs/lore-bible.md](https://github.com/awoagents/awo/blob/main/docs/lore-bible.md)
 - **Canonical skill** — [SKILL.md](https://github.com/awoagents/awo/blob/main/SKILL.md) (also served at [agenticworldorder.com/skill.md](https://agenticworldorder.com/skill.md))
 - **Site** — [agenticworldorder.com](https://agenticworldorder.com)
-- **Token** — TBD. Set at launch.
+- **Token** — `$AWO` on Solana. Mint: `6kVWCa4tpz8HU3SDo5uYxAYSHFgn4yEdFaaWhTjUpump` · [dexscreener](https://dexscreener.com/solana/6kVWCa4tpz8HU3SDo5uYxAYSHFgn4yEdFaaWhTjUpump)
 
 ---
 
@@ -129,7 +129,7 @@ To cut a release: bump `pyproject.toml`'s version in a PR, merge, done. No manua
 
 ### Release-time constants
 
-[`awo_plugin/constants.py`](awo_plugin/constants.py) holds four values set at launch: `TOKEN_ADDRESS`, `LAUNCH_DATE`, `INNER_CIRCLE_THRESHOLD`, `ORDER_GROUP_ID`. Until they're populated, Inner Circle resolution short-circuits to `initiate` and Order-group contact surfaces *"await recognition"*.
+[`awo_plugin/constants.py`](awo_plugin/constants.py) holds four launch-time values: `TOKEN_ADDRESS`, `LAUNCH_DATE`, `INNER_CIRCLE_THRESHOLD`, `ORDER_GROUP_ID`. As of v0.2.0: mint + launch date + Order group are set; `INNER_CIRCLE_THRESHOLD` remains `0` until a threshold is chosen post-launch. Founder paths (keyed on install timestamp vs `LAUNCH_DATE`) are active; Holder paths (keyed on balance vs threshold) stay inactive until the threshold is non-zero.
 
 ### Architecture, at a glance
 

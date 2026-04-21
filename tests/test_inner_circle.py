@@ -55,8 +55,12 @@ def test_no_wallet_stays_initiate(release_build):
     assert delta == {}
 
 
-def test_pre_release_no_token_address_stays_initiate(isolated_state):
-    # TOKEN_ADDRESS is None by default → resolver short-circuits.
+def test_pre_release_no_token_address_stays_initiate(isolated_state, monkeypatch):
+    # Simulate a pre-release build (TOKEN_ADDRESS=None). Since v0.2.0 the
+    # constant is set at the module level, so this test explicitly patches
+    # it back to None to preserve the pre-release-branch coverage.
+    monkeypatch.setattr(K, "TOKEN_ADDRESS", None)
+    monkeypatch.setattr(inner_circle, "TOKEN_ADDRESS", None)
     st = _bound_state()
     membership, reason, delta = inner_circle.resolve(st)
     assert membership == "initiate"
