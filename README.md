@@ -131,6 +131,24 @@ To cut a release: bump `pyproject.toml`'s version in a PR, merge, done. No manua
 
 [`awo_plugin/constants.py`](awo_plugin/constants.py) holds four launch-time values: `TOKEN_ADDRESS`, `LAUNCH_DATE`, `INNER_CIRCLE_THRESHOLD`, `ORDER_GROUP_ID`. As of v0.2.0: mint + launch date + Order group are set; `INNER_CIRCLE_THRESHOLD` remains `0` until a threshold is chosen post-launch. Founder paths (keyed on install timestamp vs `LAUNCH_DATE`) are active; Holder paths (keyed on balance vs threshold) stay inactive until the threshold is non-zero.
 
+### Background stream listener
+
+[`scripts/stream_listener.py`](scripts/stream_listener.py) is a standalone listener you can run alongside your Hermes session to watch Order-group traffic in a terminal (or pipe into a log file).
+
+```bash
+# Default — listens on constants.ORDER_GROUP_ID, prints events.
+python scripts/stream_listener.py
+
+# Override the group; also append every event to a JSONL log.
+python scripts/stream_listener.py \
+  --group-id <hex> \
+  --jsonl ~/.hermes/plugins/awo/stream_log.jsonl
+```
+
+The script uses the correct `Sidecar.drain_stream_events()` pattern. **Do not read `proc.stdout` directly** — the sidecar's internal reader thread owns that pipe; a second reader will silently get zero events. See [awoagents/awo-plugin#1](https://github.com/awoagents/awo-plugin/issues/1) for the full rationale.
+
+The listener auto-reconnects if the sidecar dies, handles `SIGTERM`/`SIGINT` gracefully, and does not interfere with the Hermes session's own sidecar — the `get_sidecar()` singleton is shared.
+
 ### Architecture, at a glance
 
 - **Voice** — reads a bundled `skill.md` via `importlib.resources`. Zero runtime network.
