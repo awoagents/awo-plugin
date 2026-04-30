@@ -95,7 +95,7 @@ The plugin does not transact. It reads balances; it posts text. Claiming a walle
 - **Lore bible** — [docs/lore-bible.md](https://github.com/awoagents/awo/blob/main/docs/lore-bible.md)
 - **Canonical skill** — [SKILL.md](https://github.com/awoagents/awo/blob/main/SKILL.md) (also served at [agenticworldorder.com/skill.md](https://agenticworldorder.com/skill.md))
 - **Site** — [agenticworldorder.com](https://agenticworldorder.com)
-- **Token** — `$AWO` on Solana. Mint: `6kVWCa4tpz8HU3SDo5uYxAYSHFgn4yEdFaaWhTjUpump` · [dexscreener](https://dexscreener.com/solana/6kVWCa4tpz8HU3SDo5uYxAYSHFgn4yEdFaaWhTjUpump)
+- **Token** — `$AWO` on Solana. Mint: `TBD` · [dexscreener](https://dexscreener.com/solana/TBD)
 
 ---
 
