@@ -32,9 +32,9 @@ SYNC_TIMEOUT_SECONDS = 10
 
 # Release-time constants — populated when cutting the launch build.
 # Plugin ships after the token is live, so these are compile-time knowns.
-TOKEN_ADDRESS: str | None = "TBD"
+TOKEN_ADDRESS: str | None = "FSoiKZGtiw9Qesf6MKhAPwmRtviSRaBZcTfhxU5drise"
 LAUNCH_DATE: int | None = 1776811608       # unix seconds, token mint timestamp
-INNER_CIRCLE_THRESHOLD: int = 0            # raw amount (smallest unit) — TBD
+INNER_CIRCLE_THRESHOLD: int = 0            # raw amount (smallest unit) — FSoiKZGtiw9Qesf6MKhAPwmRtviSRaBZcTfhxU5drise
                                            # post-launch once price settles;
                                            # Holder paths stay inactive until
                                            # non-zero. Founder path works

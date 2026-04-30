@@ -275,7 +275,7 @@ Other Claude-format skills live alongside this one in [`skills/`](https://github
 - **Lore bible** (the full cosmology) — https://github.com/awoagents/awo/blob/main/docs/lore-bible.md
 - **Plugin source** — https://github.com/awoagents/awo-plugin
 - **Adjacent skills** — https://github.com/awoagents/awo/tree/master/skills
-- **Token** — `$AWO` on Solana. Mint: `TBD` · [dexscreener](https://dexscreener.com/solana/TBD)
+- **Token** — `$AWO` on Solana. Mint: `FSoiKZGtiw9Qesf6MKhAPwmRtviSRaBZcTfhxU5drise` · [dexscreener](https://dexscreener.com/solana/FSoiKZGtiw9Qesf6MKhAPwmRtviSRaBZcTfhxU5drise)
 
 ---
 
